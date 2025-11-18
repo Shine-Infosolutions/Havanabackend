@@ -21,10 +21,7 @@ const server = createServer(app);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://ashoka-api.shineinfosolutions.in",
-  "https://ashoka-backend.vercel.app",
-  "https://ashokacrm.vercel.app",
-  "https://zomato-frontend-mocha.vercel.app",
+  
 ];
 
 const io = new Server(server, {
