@@ -16,6 +16,7 @@ const banquetCategoryRoutes = require("./src/routes/banquetCategoryRoutes.js");
 
 const planLimitRoutes = require("./src/routes/planLimitRoutes.js");
 const roomInventoryChecklistRoutes = require("./src/routes/roomInventoryChecklistRoutes.js");
+const menuItemRoutes = require("./src/routes/menuItemRoutes.js");
 const path = require("path");
 // Initialize express app
 const app = express();
@@ -98,6 +99,8 @@ app.use("/api/banquet-bookings", banquetBookingRoutes);
 app.use("/api/banquet-categories", banquetCategoryRoutes);
 app.use("/api/plan-limits", planLimitRoutes);
 app.use("/api/room-inventory-checklists", roomInventoryChecklistRoutes);
+app.use("/api/menu-items", menuItemRoutes);
+
 
 // Health check endpoint
 app.get("/health", (req, res) => {
