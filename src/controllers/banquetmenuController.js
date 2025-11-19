@@ -1,5 +1,6 @@
 const Menu = require("../models/BanquetMenu"); // adjust path as needed
 const mongoose = require("mongoose");
+const Booking = require("../models/banquetBooking");
 
 // Get all menus
 // exports.getAllMenus = async (req, res) => {
@@ -15,8 +16,47 @@ const mongoose = require("mongoose");
 
 
 
+// Create a new menu
+exports.createMenu = async (req, res) => {
+  try {
+    const { customerRef, categorizedMenu } = req.body;
+    
+    if (!customerRef) {
+      return res.status(400).json({ message: "customerRef is required" });
+    }
+    
+    // Find booking by customerRef
+    const booking = await Booking.findOne({ customerRef });
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+    
+    // Check if menu already exists
+    const existingMenu = await Menu.findOne({ customerRef });
+    if (existingMenu) {
+      return res.status(400).json({ message: "Menu already exists for this customer" });
+    }
+    
+    // Create new menu
+    const newMenu = new Menu({
+      ...categorizedMenu,
+      bookingRef: booking._id,
+      customerRef: booking.customerRef
+    });
+    
+    await newMenu.save();
+    
+    res.status(201).json({
+      message: "Menu created successfully",
+      menu: newMenu
+    });
+  } catch (err) {
+    console.error("Error creating menu:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
 // Get a menu by bookingRef ID
-const Booking = require("../models/banquetBooking");
 
 
 exports.getMenuByCustomerRef = async (req, res) => {
