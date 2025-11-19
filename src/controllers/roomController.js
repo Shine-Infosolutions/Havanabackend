@@ -211,6 +211,7 @@ exports.getAvailableRooms = async (req, res) => {
     // Step 1: Find overlapping bookings (rooms that are NOT available)
     const overlappingBookings = await Booking.find({
       isActive: true,
+      status: { $in: ['Booked', 'Checked In'] }, // Exclude 'Checked Out'
       $or: [
         {
           checkInDate: { $lt: checkOut },
@@ -224,9 +225,10 @@ exports.getAvailableRooms = async (req, res) => {
       (booking) => booking.roomNumber
     );
 
-    // Step 3: Find rooms not in that list
+    // Step 3: Find rooms not in that list AND with status 'available'
     const availableRooms = await Room.find({
       room_number: { $nin: bookedRoomNumbers },
+      status: 'available'
     }).populate("categoryId", "name");
 
     // Step 4: Group by category

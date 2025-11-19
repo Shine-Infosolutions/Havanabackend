@@ -206,30 +206,34 @@ exports.checkoutBooking = async (req, res) => {
     booking.status = 'Checked Out';
     await booking.save();
 
-    // Find the room associated with this booking
-    let room = await Room.findOne({ room_number: String(booking.roomNumber) });
-
+    // Find the room associated with this booking - try multiple approaches
+    let room = await Room.findOne({ room_number: booking.roomNumber });
+    
+    if (!room) {
+      room = await Room.findOne({ room_number: String(booking.roomNumber) });
+    }
+    
     if (!room && booking.categoryId) {
       room = await Room.findOne({
         categoryId: booking.categoryId,
-        room_number: String(booking.roomNumber)
+        room_number: booking.roomNumber
       });
-    }
-
-    if (!room) {
-      room = await Room.findOne({ room_number: booking.roomNumber });
     }
 
     if (room) {
       // Set Room.status to 'available' when checking out
       room.status = 'available';
       await room.save();
+      console.log(`Room ${room.room_number} set to available after checkout`);
+    } else {
+      console.log(`Warning: Could not find room ${booking.roomNumber} to update status`);
     }
 
     res.json({
       success: true,
       message: 'Checkout completed. Room is now available.',
-      booking
+      booking,
+      roomUpdated: !!room
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -251,29 +255,33 @@ exports.deleteBooking = async (req, res) => {
       await booking.save();
     }
 
-    // Find the room associated with this booking
-    let room = await Room.findOne({ room_number: String(booking.roomNumber) });
-
+    // Find the room associated with this booking - try multiple approaches
+    let room = await Room.findOne({ room_number: booking.roomNumber });
+    
+    if (!room) {
+      room = await Room.findOne({ room_number: String(booking.roomNumber) });
+    }
+    
     if (!room && booking.categoryId) {
       room = await Room.findOne({
         categoryId: booking.categoryId,
-        room_number: String(booking.roomNumber)
+        room_number: booking.roomNumber
       });
-    }
-
-    if (!room) {
-      room = await Room.findOne({ room_number: booking.roomNumber });
     }
 
     if (room) {
       // Set Room.status to 'available' when unbooking
       room.status = 'available';
       await room.save();
+      console.log(`Room ${room.room_number} set to available after cancellation`);
+    } else {
+      console.log(`Warning: Could not find room ${booking.roomNumber} to update status`);
     }
 
     res.json({
       success: true,
-      message: 'Booking cancelled. Room is now available.'
+      message: 'Booking cancelled. Room is now available.',
+      roomUpdated: !!room
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -457,6 +465,87 @@ exports.getDetailsByGrc = async (req, res) => {
   }
 };
 
+// Get customer details by GRC for returning customers (new booking)
+exports.getCustomerDetailsByGRC = async (req, res) => {
+  try {
+    const { grcNo } = req.params;
+
+    const booking = await Booking.findOne({ grcNo }).populate('categoryId');
+
+    if (!booking) {
+      return res.status(404).json({ error: 'No customer found with given GRC' });
+    }
+
+    // Extract only customer-related fields, not booking-specific data
+    const customerDetails = {
+      // Customer personal details
+      salutation: booking.salutation,
+      name: booking.name,
+      age: booking.age,
+      gender: booking.gender,
+      address: booking.address,
+      city: booking.city,
+      nationality: booking.nationality,
+      mobileNo: booking.mobileNo,
+      email: booking.email,
+      phoneNo: booking.phoneNo,
+      birthDate: booking.birthDate,
+      anniversary: booking.anniversary,
+      
+      // Company details
+      companyName: booking.companyName,
+      companyGSTIN: booking.companyGSTIN,
+      
+      // ID proof details
+      idProofType: booking.idProofType,
+      idProofNumber: booking.idProofNumber,
+      idProofImageUrl: booking.idProofImageUrl,
+      idProofImageUrl2: booking.idProofImageUrl2,
+      
+      // Photo and preferences
+      photoUrl: booking.photoUrl,
+      vip: booking.vip,
+      
+      // Original GRC for reference
+      originalGRC: booking.grcNo
+    };
+
+    res.json({ 
+      success: true, 
+      customerDetails,
+      message: `Customer details found for GRC ${grcNo}` 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Search customers by name or mobile for quick lookup
+exports.searchCustomers = async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+
+    const searchRegex = new RegExp(query.trim(), 'i');
+    
+    const customers = await Booking.find({
+      $or: [
+        { name: searchRegex },
+        { mobileNo: searchRegex },
+        { email: searchRegex },
+        { grcNo: searchRegex }
+      ]
+    }).select('grcNo name mobileNo email createdAt').sort({ createdAt: -1 }).limit(10);
+
+    res.json({ success: true, customers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 // Get booking by Booking ID
 exports.getBookingById = async (req, res) => {
@@ -500,6 +589,41 @@ exports.getBookingHistory = async (req, res) => {
     );
 
     res.json({ success: true, bookings: bookingHistory });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Fix room availability - utility function to sync room status with booking status
+exports.fixRoomAvailability = async (req, res) => {
+  try {
+    // Find all rooms that are marked as 'booked'
+    const bookedRooms = await Room.find({ status: 'booked' });
+    
+    let fixedCount = 0;
+    
+    for (const room of bookedRooms) {
+      // Check if there's an active booking for this room
+      const activeBooking = await Booking.findOne({
+        roomNumber: room.room_number,
+        status: { $in: ['Booked', 'Checked In'] },
+        isActive: true
+      });
+      
+      // If no active booking found, make room available
+      if (!activeBooking) {
+        room.status = 'available';
+        await room.save();
+        fixedCount++;
+        console.log(`Fixed room ${room.room_number} - set to available`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Fixed ${fixedCount} rooms that were incorrectly marked as booked`,
+      fixedCount
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
