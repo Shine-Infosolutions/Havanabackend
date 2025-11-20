@@ -3,6 +3,12 @@ const Category = require("../models/Category.js");
 const Room = require("../models/Room.js");
 const mongoose = require('mongoose');
 
+// Dynamic tax rates - can be modified as needed
+const TAX_RATES = {
+  cgstRate: 0.025, // 2.5%
+  sgstRate: 0.025  // 2.5%
+};
+
 // 🔹 Generate unique GRC number
 const generateGRC = async () => {
   let grcNo, exists = true;
@@ -31,6 +37,13 @@ exports.bookRoom = async (req, res) => {
         const room = availableRooms[i];
        // const referenceNumber = `REF-${Math.floor(100000 + Math.random() * 900000)}`;
         const grcNo = await generateGRC();
+
+        // Calculate tax amounts using dynamic rates
+        const totalRate = extraDetails.rate || 0;
+        const totalTaxRate = TAX_RATES.cgstRate + TAX_RATES.sgstRate;
+        const taxableAmount = totalRate / (1 + totalTaxRate);
+        const cgstAmount = taxableAmount * TAX_RATES.cgstRate;
+        const sgstAmount = taxableAmount * TAX_RATES.sgstRate;
 
         // Create booking document according to updated flat schema
         const booking = new Booking({
@@ -71,7 +84,12 @@ exports.bookRoom = async (req, res) => {
           planPackage: extraDetails.planPackage,
           noOfAdults: extraDetails.noOfAdults,
           noOfChildren: extraDetails.noOfChildren,
-          rate: extraDetails.rate,
+          rate: totalRate,
+          taxableAmount: taxableAmount,
+          cgstAmount: cgstAmount,
+          sgstAmount: sgstAmount,
+          cgstRate: TAX_RATES.cgstRate,
+          sgstRate: TAX_RATES.sgstRate,
           taxIncluded: extraDetails.taxIncluded,
           serviceCharge: extraDetails.serviceCharge,
 
@@ -323,7 +341,7 @@ exports.updateBooking = async (req, res) => {
 
       'idProofType', 'idProofNumber', 'idProofImageUrl', 'idProofImageUrl2', 'photoUrl',
 
-      'roomNumber', 'planPackage', 'noOfAdults', 'noOfChildren', 'rate', 'taxIncluded', 'serviceCharge',
+      'roomNumber', 'planPackage', 'noOfAdults', 'noOfChildren', 'rate', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'cgstRate', 'sgstRate', 'taxIncluded', 'serviceCharge',
 
       'arrivedFrom', 'destination', 'remark', 'businessSource', 'marketSegment', 'purposeOfVisit',
 
