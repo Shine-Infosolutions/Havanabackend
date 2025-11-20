@@ -5,6 +5,7 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
+const authRoutes = require("./src/routes/authRoutes.js");
 const categoryRoutes = require("./src/routes/category.js");
 const roomRoutes = require("./src/routes/roomRoutes.js");
 const bookingRoutes = require("./src/routes/booking.js");
@@ -68,7 +69,7 @@ app.use(express.json({ limit: "50mb" }));
 // Serve uploaded files for fallback method
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Authentication disabled
+// Add JWT_SECRET to your .env file
 
 // Database connection
 let isConnected = false;
@@ -92,6 +93,7 @@ app.use(async (req, res, next) => {
 });
 
 // Routes
+app.use("/api/auth", authRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/bookings", bookingRoutes);
