@@ -51,11 +51,10 @@ exports.bookRoom = async (req, res) => {
       const bookedRoomNumbers = roomsToBook.map(room => room.room_number);
 
       // Calculate tax amounts using dynamic rates
-      const totalRate = extraDetails.rate || 0;
-      const totalTaxRate = TAX_RATES.cgstRate + TAX_RATES.sgstRate;
-      const taxableAmount = totalRate / (1 + totalTaxRate);
+      const taxableAmount = extraDetails.rate || 0; // Input rate is the taxable amount
       const cgstAmount = taxableAmount * TAX_RATES.cgstRate;
       const sgstAmount = taxableAmount * TAX_RATES.sgstRate;
+      const totalRate = taxableAmount + cgstAmount + sgstAmount; // Total with taxes
 
       // Create single booking document for all rooms
       const booking = new Booking({
@@ -96,7 +95,7 @@ exports.bookRoom = async (req, res) => {
         planPackage: extraDetails.planPackage,
         noOfAdults: extraDetails.noOfAdults,
         noOfChildren: extraDetails.noOfChildren,
-        rate: totalRate,
+        rate: totalRate, // Total amount including taxes
         taxableAmount: taxableAmount,
         cgstAmount: cgstAmount,
         sgstAmount: sgstAmount,
