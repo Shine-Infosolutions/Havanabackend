@@ -47,6 +47,11 @@ const bookingSchema = new mongoose.Schema({
   noOfAdults: { type: Number },
   noOfChildren: { type: Number },
   rate: { type: Number },
+  taxableAmount: { type: Number },
+  cgstAmount: { type: Number },
+  sgstAmount: { type: Number },
+  cgstRate: { type: Number, default: 0.025 },
+  sgstRate: { type: Number, default: 0.025 },
   taxIncluded: { type: Boolean, default: false },
   serviceCharge: { type: Boolean, default: false },
 

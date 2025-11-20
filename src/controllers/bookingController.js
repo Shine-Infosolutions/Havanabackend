@@ -3,6 +3,12 @@ const Category = require("../models/Category.js");
 const Room = require("../models/Room.js");
 const mongoose = require('mongoose');
 
+// Dynamic tax rates - can be modified as needed
+const TAX_RATES = {
+  cgstRate: 0.025, // 2.5%
+  sgstRate: 0.025  // 2.5%
+};
+
 // 🔹 Generate unique GRC number
 const generateGRC = async () => {
   let grcNo, exists = true;
@@ -17,106 +23,125 @@ const generateGRC = async () => {
 // Book a room for a category (single or multiple)
 exports.bookRoom = async (req, res) => {
   try {
-    const handleBooking = async (categoryId, count, extraDetails = {}) => {
+    const handleBooking = async (categoryId, selectedRooms, extraDetails = {}) => {
       const category = await Category.findById(categoryId);
       if (!category) throw new Error(`Category not found: ${categoryId}`);
 
-      const availableRooms = await Room.find({ categoryId: categoryId, status: 'available' }).limit(count);
-      if (availableRooms.length < count) {
-        throw new Error(`Not enough available rooms in ${category.name}`);
+      // If selectedRooms is provided, use those specific rooms
+      let roomsToBook = [];
+      if (selectedRooms && Array.isArray(selectedRooms) && selectedRooms.length > 0) {
+        // Get the specific rooms that were selected
+        const roomIds = selectedRooms.map(room => room._id);
+        roomsToBook = await Room.find({ _id: { $in: roomIds }, status: 'available' });
+        
+        if (roomsToBook.length !== selectedRooms.length) {
+          throw new Error(`Some selected rooms are no longer available`);
+        }
+      } else {
+        // Fallback to old behavior - get any available rooms
+        const count = extraDetails.numberOfRooms || 1;
+        roomsToBook = await Room.find({ categoryId: categoryId, status: 'available' }).limit(count);
+        
+        if (roomsToBook.length < count) {
+          throw new Error(`Not enough available rooms in ${category.name}`);
+        }
       }
 
-      const bookedRoomNumbers = [];
-      for (let i = 0; i < availableRooms.length; i++) {
-        const room = availableRooms[i];
-       // const referenceNumber = `REF-${Math.floor(100000 + Math.random() * 900000)}`;
-        const grcNo = await generateGRC();
+      const grcNo = await generateGRC();
+      const bookedRoomNumbers = roomsToBook.map(room => room.room_number);
 
-        // Create booking document according to updated flat schema
-        const booking = new Booking({
-          grcNo,
-          categoryId,
-          bookingDate: extraDetails.bookingDate || new Date(),
-          numberOfRooms: 1,
-          isActive: true,
-          checkInDate: extraDetails.checkInDate,
-          checkOutDate: extraDetails.checkOutDate,
-          days: extraDetails.days,
-          timeIn: extraDetails.timeIn,
-          timeOut: extraDetails.timeOut,
+      // Calculate tax amounts using dynamic rates
+      const totalRate = extraDetails.rate || 0;
+      const totalTaxRate = TAX_RATES.cgstRate + TAX_RATES.sgstRate;
+      const taxableAmount = totalRate / (1 + totalTaxRate);
+      const cgstAmount = taxableAmount * TAX_RATES.cgstRate;
+      const sgstAmount = taxableAmount * TAX_RATES.sgstRate;
 
-          salutation: extraDetails.salutation,
-          name: extraDetails.name,
-          age: extraDetails.age,
-          gender: extraDetails.gender,
-          address: extraDetails.address,
-          city: extraDetails.city,
-          nationality: extraDetails.nationality,
-          mobileNo: extraDetails.mobileNo,
-          email: extraDetails.email,
-          phoneNo: extraDetails.phoneNo,
-          birthDate: extraDetails.birthDate,
-          anniversary: extraDetails.anniversary,
+      // Create single booking document for all rooms
+      const booking = new Booking({
+        grcNo,
+        categoryId,
+        bookingDate: extraDetails.bookingDate || new Date(),
+        numberOfRooms: roomsToBook.length,
+        isActive: true,
+        checkInDate: extraDetails.checkInDate,
+        checkOutDate: extraDetails.checkOutDate,
+        days: extraDetails.days,
+        timeIn: extraDetails.timeIn,
+        timeOut: extraDetails.timeOut,
 
-          companyName: extraDetails.companyName,
-          companyGSTIN: extraDetails.companyGSTIN,
+        salutation: extraDetails.salutation,
+        name: extraDetails.name,
+        age: extraDetails.age,
+        gender: extraDetails.gender,
+        address: extraDetails.address,
+        city: extraDetails.city,
+        nationality: extraDetails.nationality,
+        mobileNo: extraDetails.mobileNo,
+        email: extraDetails.email,
+        phoneNo: extraDetails.phoneNo,
+        birthDate: extraDetails.birthDate,
+        anniversary: extraDetails.anniversary,
 
-          idProofType: extraDetails.idProofType,
-          idProofNumber: extraDetails.idProofNumber,
-          idProofImageUrl: extraDetails.idProofImageUrl,
-          idProofImageUrl2: extraDetails.idProofImageUrl2,
-          photoUrl: extraDetails.photoUrl,
+        companyName: extraDetails.companyName,
+        companyGSTIN: extraDetails.companyGSTIN,
 
-          roomNumber: room.room_number,
-          planPackage: extraDetails.planPackage,
-          noOfAdults: extraDetails.noOfAdults,
-          noOfChildren: extraDetails.noOfChildren,
-          rate: extraDetails.rate,
-          taxIncluded: extraDetails.taxIncluded,
-          serviceCharge: extraDetails.serviceCharge,
+        idProofType: extraDetails.idProofType,
+        idProofNumber: extraDetails.idProofNumber,
+        idProofImageUrl: extraDetails.idProofImageUrl,
+        idProofImageUrl2: extraDetails.idProofImageUrl2,
+        photoUrl: extraDetails.photoUrl,
 
-          arrivedFrom: extraDetails.arrivedFrom,
-          destination: extraDetails.destination,
-          remark: extraDetails.remark,
-          businessSource: extraDetails.businessSource,
-          marketSegment: extraDetails.marketSegment,
-          purposeOfVisit: extraDetails.purposeOfVisit,
+        roomNumber: bookedRoomNumbers.join(','), // Store all room numbers as comma-separated string
+        planPackage: extraDetails.planPackage,
+        noOfAdults: extraDetails.noOfAdults,
+        noOfChildren: extraDetails.noOfChildren,
+        rate: totalRate,
+        taxableAmount: taxableAmount,
+        cgstAmount: cgstAmount,
+        sgstAmount: sgstAmount,
+        cgstRate: TAX_RATES.cgstRate,
+        sgstRate: TAX_RATES.sgstRate,
+        taxIncluded: extraDetails.taxIncluded,
+        serviceCharge: extraDetails.serviceCharge,
 
-          discountPercent: extraDetails.discountPercent,
-          discountRoomSource: extraDetails.discountRoomSource,
+        arrivedFrom: extraDetails.arrivedFrom,
+        destination: extraDetails.destination,
+        remark: extraDetails.remark,
+        businessSource: extraDetails.businessSource,
+        marketSegment: extraDetails.marketSegment,
+        purposeOfVisit: extraDetails.purposeOfVisit,
 
-          paymentMode: extraDetails.paymentMode,
-          paymentStatus: extraDetails.paymentStatus || 'Pending',
+        discountPercent: extraDetails.discountPercent,
+        discountRoomSource: extraDetails.discountRoomSource,
 
-          bookingRefNo: extraDetails.bookingRefNo,
+        paymentMode: extraDetails.paymentMode,
+        paymentStatus: extraDetails.paymentStatus || 'Pending',
 
-          mgmtBlock: extraDetails.mgmtBlock,
-          billingInstruction: extraDetails.billingInstruction,
+        bookingRefNo: extraDetails.bookingRefNo,
 
-          temperature: extraDetails.temperature,
+        mgmtBlock: extraDetails.mgmtBlock,
+        billingInstruction: extraDetails.billingInstruction,
 
-          fromCSV: extraDetails.fromCSV,
-          epabx: extraDetails.epabx,
-          vip: extraDetails.vip || false,
+        temperature: extraDetails.temperature,
 
-          status: extraDetails.status || 'Booked',
-          categoryId: category._id
-        });
+        fromCSV: extraDetails.fromCSV,
+        epabx: extraDetails.epabx,
+        vip: extraDetails.vip || false,
 
-        await booking.save();
-
-        // Set Room.status to 'booked'
-        room.status = 'booked';
-        await room.save();
-        bookedRoomNumbers.push(room.room_number);
-      }
-
-      const bookings = await Booking.find({
-        roomNumber: { $in: bookedRoomNumbers },
-        categoryId
+        status: extraDetails.status || 'Booked',
+        categoryId: category._id
       });
 
-      return bookings;
+      await booking.save();
+
+      // Set all rooms status to 'booked'
+      for (const room of roomsToBook) {
+        room.status = 'booked';
+        await room.save();
+      }
+
+      return [booking]; // Return array with single booking containing all rooms
     };
 
     // 🔹 Multiple Bookings
@@ -134,14 +159,13 @@ exports.bookRoom = async (req, res) => {
     const {
       categoryId,
       count,
+      selectedRooms,
       ...extraDetails
     } = req.body;
 
     if (!categoryId) return res.status(400).json({ error: 'categoryId is required' });
 
-    const numRooms = count && Number.isInteger(count) && count > 0 ? count : 1;
-
-    const bookings = await handleBooking(categoryId, numRooms, extraDetails);
+    const bookings = await handleBooking(categoryId, selectedRooms, extraDetails);
 
     return res.status(201).json({ success: true, booked: bookings });
 
@@ -206,34 +230,42 @@ exports.checkoutBooking = async (req, res) => {
     booking.status = 'Checked Out';
     await booking.save();
 
-    // Find the room associated with this booking - try multiple approaches
-    let room = await Room.findOne({ room_number: booking.roomNumber });
-    
-    if (!room) {
-      room = await Room.findOne({ room_number: String(booking.roomNumber) });
-    }
-    
-    if (!room && booking.categoryId) {
-      room = await Room.findOne({
-        categoryId: booking.categoryId,
-        room_number: booking.roomNumber
-      });
-    }
+    // Handle multiple room numbers (comma-separated)
+    const roomNumbers = booking.roomNumber.split(',').map(num => num.trim());
+    let updatedRooms = 0;
 
-    if (room) {
-      // Set Room.status to 'available' when checking out
-      room.status = 'available';
-      await room.save();
-      console.log(`Room ${room.room_number} set to available after checkout`);
-    } else {
-      console.log(`Warning: Could not find room ${booking.roomNumber} to update status`);
+    for (const roomNum of roomNumbers) {
+      // Find the room associated with this booking - try multiple approaches
+      let room = await Room.findOne({ room_number: roomNum });
+      
+      if (!room) {
+        room = await Room.findOne({ room_number: String(roomNum) });
+      }
+      
+      if (!room && booking.categoryId) {
+        room = await Room.findOne({
+          categoryId: booking.categoryId,
+          room_number: roomNum
+        });
+      }
+
+      if (room) {
+        // Set Room.status to 'available' when checking out
+        room.status = 'available';
+        await room.save();
+        updatedRooms++;
+        console.log(`Room ${room.room_number} set to available after checkout`);
+      } else {
+        console.log(`Warning: Could not find room ${roomNum} to update status`);
+      }
     }
 
     res.json({
       success: true,
-      message: 'Checkout completed. Room is now available.',
+      message: `Checkout completed. ${updatedRooms} room(s) are now available.`,
       booking,
-      roomUpdated: !!room
+      roomsUpdated: updatedRooms,
+      totalRooms: roomNumbers.length
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -255,33 +287,41 @@ exports.deleteBooking = async (req, res) => {
       await booking.save();
     }
 
-    // Find the room associated with this booking - try multiple approaches
-    let room = await Room.findOne({ room_number: booking.roomNumber });
-    
-    if (!room) {
-      room = await Room.findOne({ room_number: String(booking.roomNumber) });
-    }
-    
-    if (!room && booking.categoryId) {
-      room = await Room.findOne({
-        categoryId: booking.categoryId,
-        room_number: booking.roomNumber
-      });
-    }
+    // Handle multiple room numbers (comma-separated)
+    const roomNumbers = booking.roomNumber.split(',').map(num => num.trim());
+    let updatedRooms = 0;
 
-    if (room) {
-      // Set Room.status to 'available' when unbooking
-      room.status = 'available';
-      await room.save();
-      console.log(`Room ${room.room_number} set to available after cancellation`);
-    } else {
-      console.log(`Warning: Could not find room ${booking.roomNumber} to update status`);
+    for (const roomNum of roomNumbers) {
+      // Find the room associated with this booking - try multiple approaches
+      let room = await Room.findOne({ room_number: roomNum });
+      
+      if (!room) {
+        room = await Room.findOne({ room_number: String(roomNum) });
+      }
+      
+      if (!room && booking.categoryId) {
+        room = await Room.findOne({
+          categoryId: booking.categoryId,
+          room_number: roomNum
+        });
+      }
+
+      if (room) {
+        // Set Room.status to 'available' when unbooking
+        room.status = 'available';
+        await room.save();
+        updatedRooms++;
+        console.log(`Room ${room.room_number} set to available after cancellation`);
+      } else {
+        console.log(`Warning: Could not find room ${roomNum} to update status`);
+      }
     }
 
     res.json({
       success: true,
-      message: 'Booking cancelled. Room is now available.',
-      roomUpdated: !!room
+      message: `Booking cancelled. ${updatedRooms} room(s) are now available.`,
+      roomsUpdated: updatedRooms,
+      totalRooms: roomNumbers.length
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -323,7 +363,7 @@ exports.updateBooking = async (req, res) => {
 
       'idProofType', 'idProofNumber', 'idProofImageUrl', 'idProofImageUrl2', 'photoUrl',
 
-      'roomNumber', 'planPackage', 'noOfAdults', 'noOfChildren', 'rate', 'taxIncluded', 'serviceCharge',
+      'roomNumber', 'planPackage', 'noOfAdults', 'noOfChildren', 'rate', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'cgstRate', 'sgstRate', 'taxIncluded', 'serviceCharge',
 
       'arrivedFrom', 'destination', 'remark', 'businessSource', 'marketSegment', 'purposeOfVisit',
 
@@ -603,9 +643,12 @@ exports.fixRoomAvailability = async (req, res) => {
     let fixedCount = 0;
     
     for (const room of bookedRooms) {
-      // Check if there's an active booking for this room
+      // Check if there's an active booking for this room (handle comma-separated room numbers)
       const activeBooking = await Booking.findOne({
-        roomNumber: room.room_number,
+        $or: [
+          { roomNumber: room.room_number },
+          { roomNumber: { $regex: new RegExp(`(^|,)\\s*${room.room_number}\\s*(,|$)`) } }
+        ],
         status: { $in: ['Booked', 'Checked In'] },
         isActive: true
       });

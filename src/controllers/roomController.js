@@ -137,9 +137,15 @@ exports.getRoomsByCategory = async (req, res) => {
       categoryId: categoryId,
       isActive: true,
     });
-    const bookedRoomNumbers = new Set(
-      activeBookings.map((booking) => booking.roomNumber)
-    );
+    
+    // Handle comma-separated room numbers in bookings
+    const bookedRoomNumbers = new Set();
+    activeBookings.forEach(booking => {
+      if (booking.roomNumber) {
+        const roomNums = booking.roomNumber.split(',').map(num => num.trim());
+        roomNums.forEach(num => bookedRoomNumbers.add(num));
+      }
+    });
 
     const roomsWithStatus = rooms.map((room) => {
       // Ensure safe access to category properties
@@ -152,9 +158,9 @@ exports.getRoomsByCategory = async (req, res) => {
         price: room.price,
         status: room.status,
         categoryId: category,
-        isBooked: bookedRoomNumbers.has(parseInt(room.room_number)),
+        isBooked: bookedRoomNumbers.has(room.room_number.toString()),
         canSelect:
-          !bookedRoomNumbers.has(parseInt(room.room_number)) &&
+          !bookedRoomNumbers.has(room.room_number.toString()) &&
           room.status === "available",
       };
     });
@@ -220,10 +226,15 @@ exports.getAvailableRooms = async (req, res) => {
       ],
     });
 
-    // Step 2: Extract roomNumbers from those bookings
-    const bookedRoomNumbers = overlappingBookings.map(
-      (booking) => booking.roomNumber
-    );
+    // Step 2: Extract roomNumbers from those bookings (handle comma-separated room numbers)
+    const bookedRoomNumbers = [];
+    overlappingBookings.forEach(booking => {
+      if (booking.roomNumber) {
+        // Split comma-separated room numbers and add each to the array
+        const roomNums = booking.roomNumber.split(',').map(num => num.trim());
+        bookedRoomNumbers.push(...roomNums);
+      }
+    });
 
     // Step 3: Find rooms not in that list AND with status 'available'
     const availableRooms = await Room.find({
