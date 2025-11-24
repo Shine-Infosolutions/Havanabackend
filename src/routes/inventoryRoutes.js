@@ -20,6 +20,7 @@ router.get('/category/:category', inventoryController.getByCategory);
 // Stock operations
 router.post('/items/:id/stock-in', inventoryController.stockIn);
 router.post('/items/:id/stock-out', inventoryController.stockOut);
+router.put('/items/:id/stock', inventoryController.updateStock);
 
 // Stock movements and alerts
 router.get('/movements', inventoryController.getStockMovements);

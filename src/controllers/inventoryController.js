@@ -171,3 +171,37 @@ exports.getLowStockItems = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Update stock (reduce quantity)
+exports.updateStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body;
+    
+    const item = await Inventory.findById(id);
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    
+    if (item.currentStock < parseInt(quantity)) {
+      return res.status(400).json({ error: 'Insufficient stock' });
+    }
+    
+    item.currentStock -= parseInt(quantity);
+    await item.save();
+    
+    // Record stock movement
+    const movement = new StockMovement({
+      itemId: id,
+      type: 'stock-out',
+      quantity: parseInt(quantity),
+      reason: 'Room service order',
+      notes: 'Stock reduced via room service'
+    });
+    await movement.save();
+    
+    res.json({ success: true, item, movement });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};

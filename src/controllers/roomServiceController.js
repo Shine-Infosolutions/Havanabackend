@@ -9,83 +9,53 @@ try {
 // Create room service order (integrates with restaurant orders)
 exports.createOrder = async (req, res) => {
   try {
-    const { serviceType, roomNumber, guestName, grcNo, bookingId, items, notes, staffName, phoneNumber } = req.body;
+    const { serviceType, roomNumber, guestName, grcNo, bookingId, items, notes } = req.body;
     
     if (!roomNumber || !items || items.length === 0) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // For restaurant items, create restaurant order
-    if (RestaurantOrder && (serviceType === 'Restaurant' || items.some(item => item.category === 'Restaurant'))) {
-      const restaurantItems = items.filter(item => !item.category || item.category === 'Restaurant');
-      
-      if (restaurantItems.length > 0) {
-        const restaurantOrderData = {
-          staffName: staffName || 'Room Service',
-          phoneNumber: phoneNumber || '',
-          tableNo: `R${roomNumber.toString().replace(/\D/g, '').padStart(3, '0')}`,
-          items: restaurantItems.map(item => ({
-            itemId: item.itemId || item._id,
-            itemName: item.itemName || item.name,
-            quantity: item.quantity,
-            price: item.unitPrice || item.price
-          })),
-          notes: notes || `Room Service - ${guestName || 'Guest'}`,
-          amount: restaurantItems.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0),
-          discount: 0,
-          isMembership: false,
-          isLoyalty: false,
-          bookingId,
-          grcNo,
-          roomNumber,
-          guestName,
-          guestPhone: phoneNumber
-        };
-        
-        const restaurantOrder = new RestaurantOrder(restaurantOrderData);
-        await restaurantOrder.save();
-      }
-    }
+    const orderCount = await RoomService.countDocuments();
+    const orderNumber = `RS${Date.now().toString().slice(-6)}${(orderCount + 1).toString().padStart(3, '0')}`;
 
-    // For other services (laundry, etc.), use room service model
-    const nonRestaurantItems = items.filter(item => item.category && item.category !== 'Restaurant');
-    
-    if (nonRestaurantItems.length > 0) {
-      const orderCount = await RoomService.countDocuments();
-      const orderNumber = `RS${Date.now().toString().slice(-6)}${(orderCount + 1).toString().padStart(3, '0')}`;
+    let subtotal = 0;
+    const processedItems = items.map(item => {
+      const totalPrice = item.quantity * item.unitPrice;
+      subtotal += totalPrice;
+      return {
+        itemName: item.itemName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice,
+        category: item.category || 'Restaurant',
+        specialInstructions: item.specialInstructions || ''
+      };
+    });
 
-      let subtotal = 0;
-      const processedItems = nonRestaurantItems.map(item => {
-        const totalPrice = item.quantity * (item.unitPrice || item.price);
-        subtotal += totalPrice;
-        return { ...item, totalPrice };
-      });
+    const totalAmount = subtotal;
 
-      const tax = subtotal * 0.18;
-      const serviceCharge = subtotal * 0.10;
-      const totalAmount = subtotal + tax + serviceCharge;
+    const order = new RoomService({
+      orderNumber,
+      serviceType: serviceType || 'Restaurant',
+      roomNumber,
+      guestName: guestName || 'Guest',
+      grcNo,
+      bookingId,
+      items: processedItems,
+      subtotal,
+      tax: 0,
+      serviceCharge: 0,
+      totalAmount,
+      kotGenerated: true,
+      kotNumber: `KOT-${Date.now()}`,
+      kotGeneratedAt: new Date(),
+      notes: notes || ''
+    });
 
-      const order = new RoomService({
-        orderNumber,
-        serviceType: serviceType || 'Laundry',
-        roomNumber,
-        guestName,
-        grcNo,
-        bookingId,
-        items: processedItems,
-        subtotal,
-        tax,
-        serviceCharge,
-        totalAmount,
-        createdBy: req.user?.id || 'system',
-        notes
-      });
-
-      await order.save();
-    }
-
-    res.status(201).json({ success: true, message: 'Room service order created successfully' });
+    await order.save();
+    res.status(201).json({ success: true, message: 'Room service order created successfully', order });
   } catch (error) {
+    console.error('Room service creation error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -346,7 +316,7 @@ exports.billLookup = async (req, res) => {
   }
 };
 
-// Get room service charges for checkout (includes both restaurant and room service)
+// Get room service charges for checkout
 exports.getRoomServiceCharges = async (req, res) => {
   try {
     const { bookingId, grcNo, roomNumber } = req.query;
@@ -358,39 +328,9 @@ exports.getRoomServiceCharges = async (req, res) => {
     let orders = [];
     let totalCharges = 0;
 
-    // Get restaurant orders (room service)
-    if (RestaurantOrder) {
-      let restaurantFilter = {
-        tableNo: { $regex: '^R' },
-        status: { $in: ['served', 'delivered'] },
-        paymentStatus: { $ne: 'paid' }
-      };
-      
-      if (bookingId) restaurantFilter.bookingId = bookingId;
-      if (grcNo) restaurantFilter.grcNo = grcNo;
-      if (roomNumber) restaurantFilter.tableNo = `R${roomNumber.toString().replace(/\D/g, '').padStart(3, '0')}`;
-
-      const restaurantOrders = await RestaurantOrder.find(restaurantFilter)
-        .select('_id tableNo guestName amount items createdAt status')
-        .sort({ createdAt: -1 });
-
-      const restaurantCharges = restaurantOrders.map(order => ({
-        orderNumber: order._id.toString().slice(-6),
-        serviceType: 'Restaurant',
-        totalAmount: Math.round(order.amount * 1.28),
-        items: order.items,
-        createdAt: order.createdAt,
-        _id: order._id
-      }));
-
-      orders.push(...restaurantCharges);
-      totalCharges += restaurantCharges.reduce((sum, order) => sum + order.totalAmount, 0);
-    }
-
     // Get room service orders
     let roomServiceFilter = {
-      status: "delivered",
-      paymentStatus: "unpaid"
+      paymentStatus: { $ne: 'paid' }
     };
     
     if (bookingId) roomServiceFilter.bookingId = bookingId;
@@ -398,11 +338,21 @@ exports.getRoomServiceCharges = async (req, res) => {
     if (roomNumber) roomServiceFilter.roomNumber = roomNumber;
 
     const roomServiceOrders = await RoomService.find(roomServiceFilter)
-      .select('orderNumber serviceType totalAmount items createdAt')
+      .select('orderNumber serviceType totalAmount items createdAt roomNumber guestName')
       .sort({ createdAt: -1 });
 
-    orders.push(...roomServiceOrders.map(order => order.toObject()));
-    totalCharges += roomServiceOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    orders = roomServiceOrders.map(order => ({
+      orderNumber: order.orderNumber,
+      serviceType: order.serviceType || 'Room Service',
+      totalAmount: order.totalAmount,
+      items: order.items,
+      createdAt: order.createdAt,
+      roomNumber: order.roomNumber,
+      guestName: order.guestName,
+      _id: order._id
+    }));
+
+    totalCharges = orders.reduce((sum, order) => sum + order.totalAmount, 0);
 
     res.json({
       success: true,
