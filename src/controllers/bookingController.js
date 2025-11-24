@@ -85,10 +85,29 @@ exports.bookRoom = async (req, res) => {
           const totalRate = extraDetails.rate || 0;
           const ratePerRoom = totalRate / bookedRoomNumbers.length;
           
-          roomRates = bookedRoomNumbers.map(roomNumber => ({
-            roomNumber: roomNumber,
-            customRate: ratePerRoom
+          roomRates = bookedRoomNumbers.map(roomNumber => {
+            const roomData = roomsToBook.find(r => r.room_number === roomNumber);
+            return {
+              roomNumber: roomNumber,
+              customRate: ratePerRoom,
+              extraBed: roomData?.extra_bed || false
+            };
+          });
+        }
+        
+        // If roomRates from frontend has extra bed info, use that instead
+        if (extraDetails.roomRates && Array.isArray(extraDetails.roomRates)) {
+          roomRates = extraDetails.roomRates.map(rate => ({
+            roomNumber: rate.roomNumber,
+            customRate: rate.customRate || 0,
+            extraBed: Boolean(rate.extraBed)
           }));
+        }
+        
+        // Set booking level extraBed based on room-specific data
+        const hasAnyExtraBed = roomRates.some(room => room.extraBed === true);
+        if (hasAnyExtraBed) {
+          extraDetails.extraBed = true;
         }
       }
 
@@ -137,8 +156,9 @@ exports.bookRoom = async (req, res) => {
         noOfChildren: totalChildren,
         roomGuestDetails: roomGuestDetails,
         roomRates: roomRates,
-        extraBed: extraDetails.extraBed || false,
+        extraBed: roomRates.some(room => room.extraBed === true),
         extraBedCharge: extraDetails.extraBedCharge || 0,
+        extraBedRooms: roomRates.filter(room => room.extraBed === true).map(room => room.roomNumber),
         rate: totalRate, // Total amount including taxes
         taxableAmount: taxableAmount,
         cgstAmount: cgstAmount,
@@ -222,13 +242,46 @@ exports.getBookings = async (req, res) => {
   try {
     const filter = req.query.all === 'true' ? {} : { isActive: true };
     const bookings = await Booking.find(filter).populate('categoryId');
+    
+    // Get all rooms to check extra bed status
+    const rooms = await Room.find({});
 
-    // Map bookings to ensure safe access to category properties
+    // Map bookings to ensure safe access to category properties and add room-specific extra bed info
     const safeBookings = bookings.map(booking => {
       const bookingObj = booking.toObject();
       if (!bookingObj.categoryId) {
         bookingObj.categoryId = { name: 'Unknown' };
       }
+      
+      // Use extraBedRooms from database if available, otherwise calculate it
+      if (bookingObj.extraBedRooms && Array.isArray(bookingObj.extraBedRooms)) {
+        // Use the stored extraBedRooms array directly
+        bookingObj.extraBedRooms = bookingObj.extraBedRooms;
+      } else if (bookingObj.roomNumber) {
+        // Fallback: calculate from roomRates or room data
+        const roomNumbers = bookingObj.roomNumber.split(',').map(r => r.trim());
+        const extraBedRooms = [];
+        
+        roomNumbers.forEach(roomNum => {
+          const roomRate = bookingObj.roomRates?.find(r => r.roomNumber === roomNum);
+          if (roomRate?.extraBed) {
+            extraBedRooms.push(roomNum);
+          } else if (bookingObj.extraBed) {
+            extraBedRooms.push(roomNum);
+          } else {
+            const roomData = rooms.find(r => 
+              String(r.room_number) === String(roomNum) || 
+              String(r.roomNumber) === String(roomNum)
+            );
+            if (roomData?.extra_bed === true) {
+              extraBedRooms.push(roomNum);
+            }
+          }
+        });
+        
+        bookingObj.extraBedRooms = extraBedRooms;
+      }
+      
       return bookingObj;
     });
 
@@ -437,7 +490,7 @@ exports.updateBooking = async (req, res) => {
 
       'idProofType', 'idProofNumber', 'idProofImageUrl', 'idProofImageUrl2', 'photoUrl',
 
-      'roomNumber', 'planPackage', 'noOfAdults', 'noOfChildren', 'roomGuestDetails', 'roomRates', 'extraBed', 'extraBedCharge', 'rate', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'cgstRate', 'sgstRate', 'taxIncluded', 'serviceCharge',
+      'roomNumber', 'planPackage', 'noOfAdults', 'noOfChildren', 'roomGuestDetails', 'extraBedCharge', 'rate', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'cgstRate', 'sgstRate', 'taxIncluded', 'serviceCharge',
 
       'arrivedFrom', 'destination', 'remark', 'businessSource', 'marketSegment', 'purposeOfVisit',
 
@@ -459,6 +512,15 @@ exports.updateBooking = async (req, res) => {
         booking[field] = updates[field];
       }
     });
+
+    // Handle roomRates and extraBed separately
+    if (updates.roomRates && Array.isArray(updates.roomRates)) {
+      booking.roomRates = updates.roomRates;
+      // Set booking level extraBed based on room-specific data
+      booking.extraBed = updates.roomRates.some(room => room.extraBed === true);
+      // Update extraBedRooms array
+      booking.extraBedRooms = updates.roomRates.filter(room => room.extraBed === true).map(room => room.roomNumber);
+    }
 
     // Extension History (for updates related to extension)
     if (updates.extendedCheckOut) {
