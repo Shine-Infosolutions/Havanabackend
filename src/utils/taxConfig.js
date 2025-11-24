@@ -10,8 +10,9 @@ const TAX_CONFIG = {
 };
 
 // Utility functions for tax calculations
-const calculateTaxableAmount = (totalAmount) => {
-  return totalAmount / TAX_CONFIG.TAX_DIVISOR;
+const calculateTaxableAmount = (inputAmount) => {
+  // Input amount is already the taxable amount
+  return inputAmount;
 };
 
 const calculateCGST = (taxableAmount) => {

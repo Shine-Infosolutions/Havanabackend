@@ -17,18 +17,32 @@ exports.createCheckout = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
+    // Get room service charges
+    let roomServiceCharges = 0;
+    try {
+      const axios = require('axios');
+      const token = req.headers.authorization;
+      const roomServiceResponse = await axios.get(`${process.env.API_BASE_URL || 'http://localhost:5000'}/api/room-service/charges/checkout?grcNo=${booking.grcNo}`, {
+        headers: { Authorization: token }
+      });
+      roomServiceCharges = roomServiceResponse.data.totalCharges || 0;
+    } catch (error) {
+      // No room service charges found
+    }
+
     // Calculate charges
     const restaurantCharges = 0;
     const laundryCharges = 0;
     const inspectionCharges = 0;
     const bookingCharges = Number(booking.rate) || 0;
-    const totalAmount = bookingCharges;
+    const totalAmount = bookingCharges + roomServiceCharges;
 
     const checkout = await Checkout.create({
       bookingId,
       restaurantCharges,
       laundryCharges,
       inspectionCharges,
+      roomServiceCharges,
       bookingCharges,
       totalAmount,
       serviceItems: {
@@ -41,7 +55,7 @@ exports.createCheckout = async (req, res) => {
 
     res.status(201).json({ success: true, checkout });
   } catch (error) {
-    console.error('CreateCheckout Error:', error);
+    // CreateCheckout Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -61,7 +75,7 @@ exports.getCheckout = async (req, res) => {
 
     res.status(200).json({ success: true, checkout });
   } catch (error) {
-    console.error('GetCheckout Error:', error);
+    // GetCheckout Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -101,12 +115,12 @@ exports.updatePaymentStatus = async (req, res) => {
             if (room) {
               room.status = 'available';
               await room.save();
-              console.log(`Room ${roomNum} set to available`);
+              // Room set to available
             } else {
-              console.log(`Room ${roomNum} not found`);
+              // Room not found
             }
           } catch (roomError) {
-            console.error(`Error updating room ${roomNum}:`, roomError);
+            // Error updating room
           }
         }
       }
@@ -115,7 +129,7 @@ exports.updatePaymentStatus = async (req, res) => {
     await checkout.save();
     res.status(200).json({ success: true, checkout });
   } catch (error) {
-    console.error('UpdatePayment Error:', error);
+    // UpdatePayment Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -154,8 +168,8 @@ exports.getInvoice = async (req, res) => {
         grcNo: booking?.grcNo || 'N/A',
         roomNo: booking?.roomNumber || 'N/A',
         roomType: booking?.categoryId?.name || 'DELUXE ROOM',
-        pax: 2,
-        adult: 2,
+        pax: (booking?.noOfAdults || 0) + (booking?.noOfChildren || 0),
+        adult: booking?.noOfAdults || 2,
         checkInDate: booking?.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('en-GB') : 'N/A',
         checkOutDate: booking?.checkOutDate ? new Date(booking.checkOutDate).toLocaleDateString('en-GB') : 'N/A'
       },
@@ -172,8 +186,8 @@ exports.getInvoice = async (req, res) => {
         {
           date: booking?.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('en-GB') : currentDate.toLocaleDateString('en-GB'),
           particulars: `Room Rent ${booking?.categoryId?.name || 'DELUXE ROOM'} (Room: ${booking?.roomNumber || 'N/A'})`,
-          pax: 2,
-          declaredRate: checkout.bookingCharges,
+          pax: booking?.noOfAdults || 2,
+          declaredRate: booking?.rate || checkout.bookingCharges,
           hsn: 996311,
           rate: TAX_CONFIG.DISPLAY_RATE,
           cgstRate: cgstAmount,
@@ -187,14 +201,14 @@ exports.getInvoice = async (req, res) => {
           taxableAmount: taxableAmount,
           cgst: cgstAmount,
           sgst: sgstAmount,
-          amount: checkout.bookingCharges
+          amount: booking?.rate || checkout.bookingCharges
         }
       ],
       payment: {
         taxableAmount: taxableAmount,
         cgst: cgstAmount,
         sgst: sgstAmount,
-        total: checkout.totalAmount
+        total: booking?.rate || checkout.totalAmount
       },
       otherCharges: []
     };
@@ -203,6 +217,13 @@ exports.getInvoice = async (req, res) => {
       invoice.otherCharges.push({
         particulars: 'IN ROOM DINING',
         amount: checkout.restaurantCharges
+      });
+    }
+
+    if (checkout.roomServiceCharges > 0) {
+      invoice.otherCharges.push({
+        particulars: 'ROOM SERVICE',
+        amount: checkout.roomServiceCharges
       });
     }
 
@@ -222,7 +243,7 @@ exports.getInvoice = async (req, res) => {
 
     res.status(200).json({ success: true, invoice });
   } catch (error) {
-    console.error('GetInvoice Error:', error);
+    // GetInvoice Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -237,7 +258,7 @@ exports.getTaxConfig = async (req, res) => {
     };
     res.status(200).json({ success: true, taxConfig });
   } catch (error) {
-    console.error('GetTaxConfig Error:', error);
+    // GetTaxConfig Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -268,7 +289,7 @@ exports.updateTaxConfig = async (req, res) => {
       taxConfig: updatedConfig 
     });
   } catch (error) {
-    console.error('UpdateTaxConfig Error:', error);
+    // UpdateTaxConfig Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
