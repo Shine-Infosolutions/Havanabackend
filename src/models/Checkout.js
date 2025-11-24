@@ -11,6 +11,7 @@ const checkoutSchema = new mongoose.Schema({
   restaurantCharges: { type: Number, default: 0 },
   laundryCharges: { type: Number, default: 0 },
   inspectionCharges: { type: Number, default: 0 },
+  roomServiceCharges: { type: Number, default: 0 },
   bookingCharges: { type: Number, default: 0 },
   
   // Service items details
@@ -65,7 +66,7 @@ const checkoutSchema = new mongoose.Schema({
 // Calculate total amount before saving
 checkoutSchema.pre('save', function(next) {
   this.totalAmount = (this.restaurantCharges || 0) + (this.laundryCharges || 0) + 
-                    (this.inspectionCharges || 0) + (this.bookingCharges || 0);
+                    (this.inspectionCharges || 0) + (this.roomServiceCharges || 0) + (this.bookingCharges || 0);
   next();
 });
 
