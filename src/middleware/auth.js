@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 const auth = async (req, res, next) => {
-  // Bypass authentication - allow all requests
+  
   req.user = {
     _id: 'bypass-user',
     username: 'admin',
@@ -12,6 +12,8 @@ const auth = async (req, res, next) => {
   next();
 };
 
+
+//this 
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
