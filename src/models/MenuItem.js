@@ -6,12 +6,21 @@ const menuItemSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  category: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "BanquetCategory",
+  Price: {
+    type: Number,
     required: true,
+    min: 0
   },
-    
+  category: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  Discount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   foodType: {
     type: String,
     required: true,
@@ -20,6 +29,19 @@ const menuItemSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  timeToPrepare: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  image: {
+    type: String,
+    trim: true
   }
 }, {
   timestamps: true

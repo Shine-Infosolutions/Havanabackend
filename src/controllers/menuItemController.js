@@ -7,24 +7,13 @@ exports.getAllMenuItems = async (req, res) => {
     let filter = { isActive: true };
     
     if (foodType) {
-      filter.$or = [
-        { foodType: { $in: [foodType, "Both"] } },
-        { type: { $in: [foodType, "Both"] } }
-      ];
+      filter.foodType = { $in: [foodType, "Both"] };
     }
     if (category) filter.category = category;
     
-    const items = await MenuItem.find(filter).populate('category').sort({ category: 1, name: 1 });
-    
-    // Transform items to show category name instead of ObjectId
-    const transformedItems = items.map(item => ({
-      ...item.toObject(),
-      category: item.category?.cateName || item.category?.name || item.category?.toString() || item.category,
-      foodType: item.foodType || item.type
-    }));
-    res.json({ success: true, data: transformedItems });
+    const items = await MenuItem.find(filter).sort({ category: 1, name: 1 });
+    res.json({ success: true, data: items });
   } catch (error) {
-
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -32,14 +21,24 @@ exports.getAllMenuItems = async (req, res) => {
 // Add new menu item
 exports.addMenuItem = async (req, res) => {
   try {
-    const { name, category, foodType } = req.body;
+    const { name, Price, category, Discount, foodType, isActive, description, timeToPrepare, image } = req.body;
     
     const existingItem = await MenuItem.findOne({ name, category });
     if (existingItem) {
       return res.status(400).json({ success: false, message: "Item already exists in this category" });
     }
     
-    const menuItem = new MenuItem({ name, category, foodType });
+    const menuItem = new MenuItem({ 
+      name, 
+      Price, 
+      category, 
+      Discount, 
+      foodType, 
+      isActive, 
+      description, 
+      timeToPrepare, 
+      image 
+    });
     await menuItem.save();
     
     res.status(201).json({ success: true, data: menuItem });
@@ -86,31 +85,16 @@ exports.getMenuByFoodType = async (req, res) => {
   try {
     const { foodType } = req.params;
     
-    // Handle both 'foodType' and 'type' fields, and both 'Veg'/'NonVeg' and 'Non-Veg' values
     const normalizedFoodType = foodType.toLowerCase();
     const typeQuery = normalizedFoodType.includes('non') ? ['NonVeg', 'Non-Veg', 'Both'] : ['Veg', 'Both'];
     
     const items = await MenuItem.find({
       isActive: true,
-      $or: [
-        { foodType: { $in: typeQuery } },
-        { type: { $in: typeQuery } }
-      ]
-    }).populate('category').sort({ category: 1, name: 1 });
+      foodType: { $in: typeQuery }
+    }).sort({ category: 1, name: 1 });
     
     const groupedMenu = items.reduce((acc, item) => {
-      // Handle both string category and ObjectId category
-      let categoryName;
-      if (typeof item.category === 'string') {
-        categoryName = item.category;
-      } else if (item.category?.cateName) {
-        categoryName = item.category.cateName;
-      } else if (item.category?.name) {
-        categoryName = item.category.name;
-      } else {
-        categoryName = item.category?.toString() || 'UNCATEGORIZED';
-      }
-      
+      const categoryName = item.category || 'UNCATEGORIZED';
       if (!acc[categoryName]) acc[categoryName] = [];
       acc[categoryName].push(item.name);
       return acc;
