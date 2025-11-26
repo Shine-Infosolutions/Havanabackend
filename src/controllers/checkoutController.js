@@ -22,28 +22,19 @@ exports.createCheckout = async (req, res) => {
     try {
       const RestaurantOrder = require('../models/RestaurantOrder');
       
-      // Find restaurant orders for this room (table number matches any room in booking)
-      console.log('Looking for restaurant orders for booking rooms:', booking.roomNumber);
-      
       // Split room numbers and check each one
       const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(r => r.trim()) : [];
-      console.log('Individual room numbers:', roomNumbers);
       
       const restaurantOrders = await RestaurantOrder.find({
         tableNo: { $in: roomNumbers },
         paymentStatus: { $ne: 'paid' }
       });
       
-      console.log('Restaurant orders found:', restaurantOrders.length);
-      console.log('Restaurant orders:', restaurantOrders.map(o => ({ tableNo: o.tableNo, amount: o.amount, paymentStatus: o.paymentStatus })));
-      
       roomServiceCharges = restaurantOrders.reduce((total, order) => {
         return total + (order.amount || 0);
       }, 0);
-      
-      console.log('Total room service charges:', roomServiceCharges);
     } catch (error) {
-      console.log('Error fetching room service charges:', error.message);
+      // Error fetching room service charges
     }
 
     // Calculate charges
@@ -62,7 +53,6 @@ exports.createCheckout = async (req, res) => {
       checkout.totalAmount = checkout.bookingCharges + roomServiceCharges;
       checkout.pendingAmount = checkout.totalAmount;
       await checkout.save();
-      console.log('Updated existing checkout with room service charges:', roomServiceCharges);
     } else {
       // Create new checkout
       checkout = await Checkout.create({
@@ -80,7 +70,6 @@ exports.createCheckout = async (req, res) => {
         },
         pendingAmount: totalAmount
       });
-      console.log('Created new checkout with room service charges:', roomServiceCharges);
     }
 
     res.status(201).json({ success: true, checkout });
@@ -187,7 +176,7 @@ exports.getInvoice = async (req, res) => {
   try {
     const { id } = req.params;
     
-    console.log('Getting invoice for checkout ID:', id);
+
     
     const checkout = await Checkout.findById(id)
       .populate({
@@ -203,35 +192,16 @@ exports.getInvoice = async (req, res) => {
       return res.status(404).json({ message: 'Checkout not found' });
     }
     
-    console.log('Found checkout record:', {
-      id: checkout._id,
-      roomServiceCharges: checkout.roomServiceCharges,
-      restaurantCharges: checkout.restaurantCharges,
-      bookingId: checkout.bookingId?._id
-    });
+
     
     // Recalculate room service charges if they are 0
     if (checkout.roomServiceCharges === 0) {
-      console.log('Recalculating room service charges for invoice...');
       try {
         const RestaurantOrder = require('../models/RestaurantOrder');
         const booking = checkout.bookingId;
         
         // Split room numbers and check each one
         const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(r => r.trim()) : [];
-        console.log('Checking room numbers for restaurant orders:', roomNumbers);
-        
-        // First check all restaurant orders for this room
-        const allRestaurantOrders = await RestaurantOrder.find({
-          tableNo: { $in: roomNumbers }
-        });
-        
-        console.log('All restaurant orders for room:', allRestaurantOrders.map(o => ({ 
-          tableNo: o.tableNo, 
-          amount: o.amount, 
-          paymentStatus: o.paymentStatus,
-          createdAt: o.createdAt 
-        })));
         
         // Use unpaid orders for calculation
         const restaurantOrders = await RestaurantOrder.find({
@@ -246,13 +216,6 @@ exports.getInvoice = async (req, res) => {
           paymentStatus: { $ne: 'paid' }
         });
         
-        console.log('Room service orders found:', roomServiceOrders.length);
-        console.log('Room service orders:', roomServiceOrders.map(o => ({ 
-          roomNumber: o.roomNumber, 
-          totalAmount: o.totalAmount, 
-          paymentStatus: o.paymentStatus 
-        })));
-        
         const restaurantCharges = restaurantOrders.reduce((total, order) => {
           return total + (order.amount || 0);
         }, 0);
@@ -262,10 +225,6 @@ exports.getInvoice = async (req, res) => {
         }, 0);
         
         const calculatedRoomServiceCharges = restaurantCharges + roomServiceCharges;
-        
-        console.log('Restaurant charges:', restaurantCharges);
-        console.log('Room service charges:', roomServiceCharges);
-        console.log('Total calculated room service charges:', calculatedRoomServiceCharges);
         
         // Update checkout with calculated charges
         if (calculatedRoomServiceCharges > 0) {
@@ -277,7 +236,7 @@ exports.getInvoice = async (req, res) => {
           checkout.roomServiceCharges = calculatedRoomServiceCharges;
         }
       } catch (error) {
-        console.log('Error recalculating room service charges:', error.message);
+        // Error recalculating room service charges
       }
     }
 
@@ -294,15 +253,7 @@ exports.getInvoice = async (req, res) => {
     const roomServiceAmount = checkout.roomServiceCharges || 0;
     const totalTaxableAmount = bookingTaxableAmount + roomServiceAmount;
     
-    console.log('Final calculation - Room service amount:', roomServiceAmount);
-    console.log('Final calculation - Total taxable amount:', totalTaxableAmount);
-    
-    console.log('Using checkout room service charges:', roomServiceAmount);
-    console.log('Taxable amount breakdown:', {
-      bookingTaxableAmount,
-      roomServiceAmount,
-      totalTaxableAmount
-    });
+
     
     const cgstAmount = booking?.cgstAmount || (totalTaxableAmount * bookingCgstRate);
     const sgstAmount = booking?.sgstAmount || (totalTaxableAmount * bookingSgstRate);
@@ -350,12 +301,8 @@ exports.getInvoice = async (req, res) => {
         });
         
         // Add room service charges as line items - force add if checkout has room service charges
-        console.log('Checkout room service charges:', checkout.roomServiceCharges);
-        
-        // Force add room service charges if they exist in checkout
         const roomServiceAmount = checkout.roomServiceCharges || 0;
         if (roomServiceAmount > 0) {
-          console.log('Adding room service line item:', roomServiceAmount);
           items.push({
             date: booking?.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('en-GB') : currentDate.toLocaleDateString('en-GB'),
             particulars: `Room Service Charges`,
@@ -367,8 +314,6 @@ exports.getInvoice = async (req, res) => {
             sgstRate: roomServiceAmount * bookingSgstRate,
             amount: roomServiceAmount
           });
-        } else {
-          console.log('No room service charges to add. Checkout value:', checkout.roomServiceCharges);
         }
         
         // Add individual extra bed charges for each room
