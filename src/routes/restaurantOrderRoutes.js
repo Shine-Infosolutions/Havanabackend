@@ -12,6 +12,9 @@ router.get('/all', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT D
 // Update restaurant order status (All roles)
 router.patch('/:id/status', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), restaurantOrderController.updateOrderStatus);
 
+// Update restaurant order (All roles)
+router.patch('/:id', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), restaurantOrderController.updateOrder);
+
 // Link existing orders to bookings (Admin, GM)
 router.post('/link-to-bookings', auth, authorize(['ADMIN', 'GM']), restaurantOrderController.linkOrdersToBookings);
 

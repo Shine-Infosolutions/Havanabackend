@@ -2,10 +2,8 @@ const Checkout = require('../models/Checkout');
 const Booking = require('../models/Booking');
 const Room = require('../models/Room');
 const mongoose = require('mongoose');
-const { TAX_CONFIG, calculateTaxableAmount, calculateCGST, calculateSGST } = require('../utils/taxConfig');
+const { TAX_CONFIG } = require('../utils/taxConfig');
 const { generateInvoiceNumber } = require('./invoiceController');
-const fs = require('fs');
-const path = require('path');
 
 // Create checkout record
 exports.createCheckout = async (req, res) => {
@@ -29,34 +27,33 @@ exports.createCheckout = async (req, res) => {
       // Split room numbers and check each one
       const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(r => r.trim()) : [];
       
-      // Get restaurant orders (exclude cancelled orders)
+      // Get restaurant orders for this booking (exclude cancelled and completed orders)
       const restaurantOrders = await RestaurantOrder.find({
-        tableNo: { $in: roomNumbers },
+        bookingId: bookingId,
         paymentStatus: { $ne: 'paid' },
-        status: { $ne: 'cancelled' }
+        status: { $nin: ['cancelled', 'canceled', 'completed'] }
       });
       
       restaurantCharges = restaurantOrders.reduce((total, order) => {
         return total + (order.amount || 0);
       }, 0);
       
-      // Get room service orders
+      // Get room service orders for this booking (exclude cancelled and completed orders)
       const roomServiceOrders = await RoomService.find({
-        roomNumber: { $in: roomNumbers },
+        bookingId: bookingId,
         paymentStatus: { $ne: 'paid' },
-        status: { $ne: 'cancelled' }
+        status: { $nin: ['cancelled', 'canceled', 'completed'] }
       });
       
       roomServiceCharges = roomServiceOrders.reduce((total, order) => {
         return total + (order.totalAmount || 0);
       }, 0);
     } catch (error) {
-      // Error fetching charges
+      console.error('Error fetching charges:', error);
     }
 
     // Calculate charges
     const laundryCharges = 0;
-    const inspectionCharges = 0;
     const bookingCharges = Number(booking.rate) || 0;
     const totalAmount = bookingCharges + restaurantCharges + roomServiceCharges;
 
@@ -76,22 +73,15 @@ exports.createCheckout = async (req, res) => {
         bookingId,
         restaurantCharges,
         laundryCharges,
-        inspectionCharges,
         roomServiceCharges,
         bookingCharges,
         totalAmount,
-        serviceItems: {
-          restaurant: [],
-          laundry: [],
-          inspection: []
-        },
         pendingAmount: totalAmount
       });
     }
 
     res.status(201).json({ success: true, checkout });
   } catch (error) {
-    // CreateCheckout Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -109,9 +99,46 @@ exports.getCheckout = async (req, res) => {
       return res.status(404).json({ message: 'Checkout not found' });
     }
 
+    // Recalculate charges to ensure current data
+    const booking = checkout.bookingId;
+    const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(r => r.trim()) : [];
+    
+    try {
+      const RestaurantOrder = require('../models/RestaurantOrder');
+      const RoomService = require('../models/RoomService');
+      
+      const restaurantOrders = await RestaurantOrder.find({
+        $or: [
+          { tableNo: { $in: roomNumbers } },
+          { bookingId: bookingId }
+        ],
+        paymentStatus: { $ne: 'paid' },
+        status: { $nin: ['cancelled', 'canceled'] }
+      });
+      
+      const roomServiceOrders = await RoomService.find({
+        roomNumber: { $in: roomNumbers },
+        paymentStatus: { $ne: 'paid' },
+        status: { $nin: ['cancelled', 'canceled'] }
+      });
+      
+      const restaurantCharges = restaurantOrders.reduce((total, order) => total + (order.amount || 0), 0);
+      const roomServiceCharges = roomServiceOrders.reduce((total, order) => total + (order.totalAmount || 0), 0);
+      
+      // Update checkout if charges have changed
+      if (restaurantCharges !== checkout.restaurantCharges || roomServiceCharges !== checkout.roomServiceCharges) {
+        checkout.restaurantCharges = restaurantCharges;
+        checkout.roomServiceCharges = roomServiceCharges;
+        checkout.totalAmount = checkout.bookingCharges + restaurantCharges + roomServiceCharges;
+        checkout.pendingAmount = checkout.totalAmount;
+        await checkout.save();
+      }
+    } catch (error) {
+      console.error('Error recalculating charges:', error);
+    }
+
     res.status(200).json({ success: true, checkout });
   } catch (error) {
-    // GetCheckout Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -126,6 +153,44 @@ exports.getCheckoutByBooking = async (req, res) => {
     
     if (!checkout) {
       return res.status(404).json({ message: 'Checkout not found' });
+    }
+
+    // Recalculate charges to ensure current data
+    const booking = checkout.bookingId;
+    const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(r => r.trim()) : [];
+    
+    try {
+      const RestaurantOrder = require('../models/RestaurantOrder');
+      const RoomService = require('../models/RoomService');
+      
+      const restaurantOrders = await RestaurantOrder.find({
+        $or: [
+          { tableNo: { $in: roomNumbers } },
+          { bookingId: bookingId }
+        ],
+        paymentStatus: { $ne: 'paid' },
+        status: { $nin: ['cancelled', 'canceled'] }
+      });
+      
+      const roomServiceOrders = await RoomService.find({
+        roomNumber: { $in: roomNumbers },
+        paymentStatus: { $ne: 'paid' },
+        status: { $nin: ['cancelled', 'canceled'] }
+      });
+      
+      const restaurantCharges = restaurantOrders.reduce((total, order) => total + (order.amount || 0), 0);
+      const roomServiceCharges = roomServiceOrders.reduce((total, order) => total + (order.totalAmount || 0), 0);
+      
+      // Update checkout if charges have changed
+      if (restaurantCharges !== checkout.restaurantCharges || roomServiceCharges !== checkout.roomServiceCharges) {
+        checkout.restaurantCharges = restaurantCharges;
+        checkout.roomServiceCharges = roomServiceCharges;
+        checkout.totalAmount = checkout.bookingCharges + restaurantCharges + roomServiceCharges;
+        checkout.pendingAmount = checkout.totalAmount;
+        await checkout.save();
+      }
+    } catch (error) {
+      console.error('Error recalculating charges:', error);
     }
 
     res.status(200).json({ success: true, checkout });
@@ -163,18 +228,47 @@ exports.updatePaymentStatus = async (req, res) => {
       if (booking.roomNumber && booking.roomNumber.trim()) {
         const roomNumbers = booking.roomNumber.split(',').map(num => num.trim()).filter(num => num);
         
+        // Update room service orders to paid and completed
+        try {
+          const RoomService = require('../models/RoomService');
+          await RoomService.updateMany(
+            { 
+              roomNumber: { $in: roomNumbers },
+              paymentStatus: { $ne: 'paid' },
+              status: { $ne: 'cancelled' }
+            },
+            { 
+              paymentStatus: 'paid',
+              status: 'completed'
+            }
+          );
+          
+          // Also update restaurant orders
+          const RestaurantOrder = require('../models/RestaurantOrder');
+          await RestaurantOrder.updateMany(
+            {
+              tableNo: { $in: roomNumbers },
+              paymentStatus: { $ne: 'paid' },
+              status: { $ne: 'cancelled' }
+            },
+            {
+              paymentStatus: 'paid',
+              status: 'completed'
+            }
+          );
+        } catch (serviceError) {
+          console.error('Error updating service orders:', serviceError);
+        }
+        
         for (const roomNum of roomNumbers) {
           try {
             const room = await Room.findOne({ room_number: roomNum });
             if (room) {
               room.status = 'available';
               await room.save();
-              // Room set to available
-            } else {
-              // Room not found
             }
           } catch (roomError) {
-            // Error updating room
+            console.error('Error updating room:', roomError);
           }
         }
       }
@@ -183,7 +277,6 @@ exports.updatePaymentStatus = async (req, res) => {
     await checkout.save();
     res.status(200).json({ success: true, checkout });
   } catch (error) {
-    // UpdatePayment Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -232,7 +325,6 @@ exports.getInvoice = async (req, res) => {
     const { id } = req.params;
     
 
-    
     const checkout = await Checkout.findById(id)
       .populate({
         path: 'bookingId',
@@ -246,9 +338,6 @@ exports.getInvoice = async (req, res) => {
     if (!checkout) {
       return res.status(404).json({ message: 'Checkout not found' });
     }
-    
-
-    
     // Always recalculate room service charges to get latest orders
     try {
       const RestaurantOrder = require('../models/RestaurantOrder');
@@ -259,9 +348,12 @@ exports.getInvoice = async (req, res) => {
       
       // Use unpaid and non-cancelled orders for calculation
       const restaurantOrders = await RestaurantOrder.find({
-        tableNo: { $in: roomNumbers },
+        $or: [
+          { tableNo: { $in: roomNumbers } },
+          { bookingId: booking._id }
+        ],
         paymentStatus: { $ne: 'paid' },
-        status: { $ne: 'cancelled' }
+        status: { $nin: ['cancelled', 'canceled'] }
       });
       
       // Also check RoomService model for room service orders
@@ -292,7 +384,7 @@ exports.getInvoice = async (req, res) => {
       checkout.restaurantCharges = restaurantCharges;
       checkout.roomServiceCharges = roomServiceCharges;
     } catch (error) {
-      // Error recalculating room service charges
+      console.error('Error recalculating charges:', error);
     }
 
     const booking = checkout.bookingId;
@@ -317,8 +409,6 @@ exports.getInvoice = async (req, res) => {
     const restaurantAmount = checkout.restaurantCharges || 0;
     const roomServiceAmount = checkout.roomServiceCharges || 0;
     const totalTaxableAmount = bookingTaxableAmount + restaurantAmount + roomServiceAmount;
-    
-
     
     const cgstAmount = booking?.cgstAmount || (totalTaxableAmount * bookingCgstRate);
     const sgstAmount = booking?.sgstAmount || (totalTaxableAmount * bookingSgstRate);
@@ -477,7 +567,6 @@ exports.getInvoice = async (req, res) => {
 
     res.status(200).json({ success: true, invoice });
   } catch (error) {
-    // GetInvoice Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -492,10 +581,11 @@ exports.getTaxConfig = async (req, res) => {
     };
     res.status(200).json({ success: true, taxConfig });
   } catch (error) {
-    // GetTaxConfig Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+
 
 // Update tax configuration
 exports.updateTaxConfig = async (req, res) => {
@@ -523,7 +613,6 @@ exports.updateTaxConfig = async (req, res) => {
       taxConfig: updatedConfig 
     });
   } catch (error) {
-    // UpdateTaxConfig Error
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

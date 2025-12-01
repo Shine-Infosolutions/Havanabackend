@@ -32,6 +32,9 @@ router.get("/customer/:grcNo", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAF
 // Search customers (Admin, Front Desk, Staff, Accounts)
 router.get("/search", auth, authorize(['ADMIN', 'FRONT DESK', 'STAFF', 'ACCOUNTS']), bookingController.searchCustomers);
 
+// Get booking by booking number (All roles)
+router.get("/booking-number/:bookingNo", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), bookingController.getBookingByNumber);
+
 // Get booking by ID (All roles)
 router.get("/:bookingId", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), bookingController.getBookingById);
 

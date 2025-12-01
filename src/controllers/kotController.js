@@ -40,6 +40,18 @@ exports.updateKOTStatus = async (req, res) => {
       return res.status(404).json({ error: 'KOT not found' });
     }
     
+    // Broadcast KOT status update via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('kot-status-update', {
+        kotId: kot._id,
+        orderId: kot.orderId,
+        status: kot.status,
+        tableNo: kot.tableNo,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     res.json(kot);
   } catch (error) {
     res.status(500).json({ error: error.message });

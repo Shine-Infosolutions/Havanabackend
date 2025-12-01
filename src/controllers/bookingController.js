@@ -1133,8 +1133,12 @@ exports.getBookingCharges = async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
     
-    // Get all room services for this booking
-    const roomServices = await RoomService.find(serviceQuery).sort({ createdAt: -1 });
+    // Get all room services for this booking (exclude cancelled only)
+    const roomServices = await RoomService.find({
+      ...serviceQuery,
+      paymentStatus: { $ne: 'paid' },
+      status: { $nin: ['cancelled', 'canceled'] }
+    }).sort({ createdAt: -1 });
     
     // Get all restaurant orders for this booking
     // Try multiple query approaches since restaurant orders might not have grcNo/bookingId populated
@@ -1147,7 +1151,9 @@ exports.getBookingCharges = async (req, res) => {
     }
     
     const restaurantOrders = await RestaurantOrder.find({
-      $or: restaurantOrderQueries
+      $or: restaurantOrderQueries,
+      paymentStatus: { $ne: 'paid' },
+      status: { $nin: ['cancelled', 'canceled'] }
     }).sort({ createdAt: -1 });
     
     // Calculate totals
@@ -1204,7 +1210,11 @@ exports.getBookingCharges = async (req, res) => {
         totalRoomCharges: booking.rate || 0,
         totalServiceCharges,
         totalRestaurantCharges,
-        grandTotal: (booking.rate || 0) + totalServiceCharges + totalRestaurantCharges
+        subtotal: (booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges,
+        cgstAmount: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * (booking.cgstRate || 0.025) * 100) / 100,
+        sgstAmount: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * (booking.sgstRate || 0.025) * 100) / 100,
+        totalTax: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * ((booking.cgstRate || 0.025) + (booking.sgstRate || 0.025)) * 100) / 100,
+        grandTotal: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * (1 + (booking.cgstRate || 0.025) + (booking.sgstRate || 0.025)) * 100) / 100
       }
     };
     

@@ -67,6 +67,58 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
     
+    // Broadcast order status update via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('order-status-update', {
+        orderId: order._id,
+        status: order.status,
+        tableNo: order.tableNo,
+        customerName: order.customerName,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update restaurant order
+exports.updateOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const order = await RestaurantOrder.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    // Also update corresponding KOT if items were updated
+    if (updateData.items) {
+      try {
+        const KOT = require('../models/KOT');
+        const kot = await KOT.findOne({ orderId: id });
+        if (kot) {
+          const kotItems = updateData.items.map(item => ({
+            itemName: item.itemName,
+            quantity: item.quantity,
+            specialInstructions: item.note || ''
+          }));
+          await KOT.findByIdAndUpdate(kot._id, { items: kotItems });
+        }
+      } catch (kotError) {
+        console.error('Error updating KOT:', kotError);
+      }
+    }
+    
     res.json(order);
   } catch (error) {
     res.status(500).json({ error: error.message });
