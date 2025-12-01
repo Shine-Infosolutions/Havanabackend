@@ -1188,6 +1188,16 @@ exports.getBookingCharges = async (req, res) => {
   }
 };
 
+// Get next GRC number for new booking
+exports.getNextGRC = async (req, res) => {
+  try {
+    const grcNo = await generateGRC();
+    res.json({ success: true, grcNo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Fix room availability - utility function to sync room status with booking status
 exports.fixRoomAvailability = async (req, res) => {
   try {
