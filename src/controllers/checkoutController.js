@@ -172,6 +172,44 @@ exports.updatePaymentStatus = async (req, res) => {
   }
 };
 
+// Generate and save invoice
+exports.generateInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const checkout = await Checkout.findById(id)
+      .populate({
+        path: 'bookingId',
+        select: 'grcNo name roomNumber checkInDate checkOutDate mobileNo address city rate taxableAmount cgstAmount sgstAmount cgstRate sgstRate noOfAdults noOfChildren extraBed extraBedCharge extraBedRooms roomRates days',
+        populate: {
+          path: 'categoryId',
+          select: 'name'
+        }
+      });
+    
+    if (!checkout) {
+      return res.status(404).json({ message: 'Checkout not found' });
+    }
+    
+    // Generate invoice number if not exists
+    if (!checkout.invoiceNumber) {
+      checkout.invoiceNumber = await generateInvoiceNumber();
+      checkout.invoiceGenerated = true;
+      checkout.invoiceGeneratedAt = new Date();
+      await checkout.save();
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Invoice generated successfully',
+      invoiceNumber: checkout.invoiceNumber,
+      checkoutId: checkout._id
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // Get invoice by checkout ID
 exports.getInvoice = async (req, res) => {
   try {
@@ -241,7 +279,16 @@ exports.getInvoice = async (req, res) => {
 
     const booking = checkout.bookingId;
     const currentDate = new Date();
-    const billNo = await generateInvoiceNumber();
+    
+    // Generate invoice number only if not already generated
+    let billNo = checkout.invoiceNumber;
+    if (!billNo) {
+      billNo = await generateInvoiceNumber();
+      checkout.invoiceNumber = billNo;
+      checkout.invoiceGenerated = true;
+      checkout.invoiceGeneratedAt = currentDate;
+      await checkout.save();
+    }
     
     // Use booking's actual GST rates
     const bookingCgstRate = booking?.cgstRate || 0;
