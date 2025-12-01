@@ -30,15 +30,20 @@ const uploadBase64ToCloudinary = async (base64String) => {
   }
 };
 
-// 🔹 Generate unique GRC number
+// 🔹 Generate sequential GRC number (resets in March end)
 const generateGRC = async () => {
-  let grcNo, exists = true;
-  while (exists) {
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    grcNo = `GRC-${rand}`;
-    exists = await Booking.findOne({ grcNo });
+  // Find the highest existing GRC number
+  const lastBooking = await Booking.findOne({}, { grcNo: 1 })
+    .sort({ grcNo: -1 })
+    .lean();
+  
+  let nextNumber = 1;
+  if (lastBooking && lastBooking.grcNo) {
+    const lastNumber = parseInt(lastBooking.grcNo.replace('GRC', ''));
+    nextNumber = lastNumber + 1;
   }
-  return grcNo;
+  
+  return `GRC${nextNumber.toString().padStart(4, '0')}`;
 };
 
 // Book a room for a category (single or multiple)
