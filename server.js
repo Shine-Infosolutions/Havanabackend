@@ -38,7 +38,8 @@ const allowedOrigins = [
   "https://havana-f.vercel.app",
   "https://havana-f1.vercel.app",
   "https://havanabackend-gray.vercel.app",
-  "https://havana-f-beta.vercel.app",
+  "https://havana-f-chi.vercel.app",
+  
 ];
 
 const io = new Server(server, {
@@ -51,9 +52,9 @@ const io = new Server(server, {
       }
     },
     methods: ["GET", "POST"],
-    credentials: true,
+    credentials: true
   },
-  transports: ["polling", "websocket"],
+  transports: ['polling', 'websocket']
 });
 
 // Make io available globally
@@ -91,11 +92,8 @@ const connectToMongoDB = async () => {
     }
 
     console.log("Attempting to connect to MongoDB...");
-    console.log(
-      "MongoDB URI:",
-      process.env.MONGO_URI ? "URI found" : "URI missing"
-    );
-
+    console.log("MongoDB URI:", process.env.MONGO_URI ? "URI found" : "URI missing");
+    
     const connectionOptions = {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 10000,
@@ -104,55 +102,50 @@ const connectToMongoDB = async () => {
       minPoolSize: 1,
       maxIdleTimeMS: 30000,
       retryWrites: true,
-      w: "majority",
+      w: 'majority'
     };
-
+    
     // Try primary connection
     try {
       await mongoose.connect(process.env.MONGO_URI, connectionOptions);
     } catch (srvError) {
-      console.log(
-        "SRV connection failed, trying with different DNS settings..."
-      );
-
+      console.log("SRV connection failed, trying with different DNS settings...");
+      
       // If SRV fails, try with family: 4 to force IPv4
       connectionOptions.family = 4;
       await mongoose.connect(process.env.MONGO_URI, connectionOptions);
     }
-
+    
     isConnected = true;
     connectionAttempts = 0;
     console.log("MongoDB connected successfully to:", mongoose.connection.name);
+    
   } catch (error) {
     console.error("Database connection failed:", error.message);
     console.error("Error code:", error.code);
     isConnected = false;
     connectionAttempts++;
-
+    
     if (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
-      console.log(
-        `Retrying connection in 5 seconds... (Attempt ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})`
-      );
+      console.log(`Retrying connection in 5 seconds... (Attempt ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})`);
       setTimeout(connectToMongoDB, 5000);
     } else {
-      console.error(
-        "Max connection attempts reached. Server will continue without database."
-      );
+      console.error("Max connection attempts reached. Server will continue without database.");
     }
   }
 };
 
 // Handle MongoDB connection events
-mongoose.connection.on("disconnected", () => {
-  console.log("MongoDB disconnected");
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
   isConnected = false;
   if (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
     connectToMongoDB();
   }
 });
 
-mongoose.connection.on("error", (err) => {
-  console.error("MongoDB connection error:", err);
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
   isConnected = false;
 });
 
@@ -163,21 +156,17 @@ connectToMongoDB();
 app.use((req, res, next) => {
   // Add connection status to request object
   req.dbConnected = isConnected;
-
+  
   // For API routes, return error if DB is not connected
-  if (
-    req.path.startsWith("/api/") &&
-    !isConnected &&
-    req.path !== "/api/health"
-  ) {
+  if (req.path.startsWith('/api/') && !isConnected && req.path !== '/api/health') {
     return res.status(503).json({
       error: "Service temporarily unavailable",
       message: "Database connection is not available. Please try again later.",
       dbConnected: false,
-      connectionAttempts: connectionAttempts,
+      connectionAttempts: connectionAttempts
     });
   }
-
+  
   next();
 });
 
@@ -202,6 +191,7 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/room-service", roomServiceRoutes);
 app.use("/api/invoices", invoiceRoutes);
 
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
@@ -209,7 +199,7 @@ app.get("/health", (req, res) => {
     dbConnected: isConnected,
     mongoUri: process.env.MONGO_URI ? "Present" : "Missing",
     connectionState: mongoose.connection.readyState,
-    connectionAttempts: connectionAttempts,
+    connectionAttempts: connectionAttempts
   });
 });
 
@@ -217,33 +207,31 @@ app.get("/health", (req, res) => {
 app.get("/test-db", async (req, res) => {
   try {
     if (!process.env.MONGO_URI) {
-      return res
-        .status(500)
-        .json({ error: "MONGO_URI not found in environment" });
+      return res.status(500).json({ error: "MONGO_URI not found in environment" });
     }
-
+    
     if (!isConnected) {
       return res.status(503).json({
         error: "Database not connected",
         message: "MongoDB connection is not available",
         readyState: mongoose.connection.readyState,
-        connectionAttempts: connectionAttempts,
+        connectionAttempts: connectionAttempts
       });
     }
-
+    
     const testConnection = await mongoose.connection.db.admin().ping();
     res.json({
       success: true,
       message: "Database connection successful",
       dbName: mongoose.connection.name,
       readyState: mongoose.connection.readyState,
-      ping: testConnection,
+      ping: testConnection
     });
   } catch (error) {
     res.status(500).json({
       error: "Database test failed",
       message: error.message,
-      readyState: mongoose.connection.readyState,
+      readyState: mongoose.connection.readyState
     });
   }
 });
@@ -259,8 +247,8 @@ app.use((err, req, res, next) => {
 });
 
 // Banquet updates via Socket.io
-io.on("banquet-update", (data) => {
-  io.emit("banquet-notification", data);
+io.on('banquet-update', (data) => {
+  io.emit('banquet-notification', data);
 });
 
 const PORT = process.env.PORT || 5000;
