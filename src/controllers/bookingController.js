@@ -177,6 +177,7 @@ exports.bookRoom = async (req, res) => {
       // Create single booking document for all rooms
       const booking = new Booking({
         grcNo,
+        invoiceNumber: extraDetails.invoiceNumber,
         categoryId,
         bookingDate: extraDetails.bookingDate || new Date(),
         numberOfRooms: roomsToBook.length,
@@ -597,6 +598,9 @@ exports.updateBooking = async (req, res) => {
       'status', 'categoryId',
 
       'bookingDate', 'numberOfRooms', 'checkInDate', 'checkOutDate', 'days', 'timeIn', 'timeOut',
+
+      // Invoice number
+      'invoiceNumber',
 
       // Multiple Advance Payment fields
       'advancePayments', 'totalAdvanceAmount', 'balanceAmount'

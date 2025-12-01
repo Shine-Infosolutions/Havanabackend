@@ -3,7 +3,7 @@ const Booking = require('../models/Booking');
 const Room = require('../models/Room');
 const mongoose = require('mongoose');
 const { TAX_CONFIG, calculateTaxableAmount, calculateCGST, calculateSGST } = require('../utils/taxConfig');
-const { generateInvoiceNumber } = require('../utils/invoiceNumberGenerator');
+const { generateInvoiceNumber } = require('./invoiceController');
 const fs = require('fs');
 const path = require('path');
 

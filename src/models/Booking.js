@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const bookingSchema = new mongoose.Schema({
   bookingNo: { type: String, unique: true, index: true },
   grcNo: { type: String, unique: true, required: true },  // Guest Registration Card No
+  invoiceNumber: { type: String },  // Invoice number like HH/12/0001
   categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
 
   bookingDate: { type: Date, default: Date.now },
