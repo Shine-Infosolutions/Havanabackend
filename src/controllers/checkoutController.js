@@ -39,11 +39,12 @@ exports.createCheckout = async (req, res) => {
         return total + (order.amount || 0);
       }, 0);
       
-      // Get room service orders for this booking (exclude cancelled and completed orders)
+      // Get room service orders for this booking (exclude cancelled, completed, and non-chargeable orders)
       const roomServiceOrders = await RoomService.find({
         bookingId: bookingId,
         paymentStatus: { $ne: 'paid' },
-        status: { $nin: ['cancelled', 'canceled', 'completed'] }
+        status: { $nin: ['cancelled', 'canceled', 'completed'] },
+        nonChargeable: { $ne: true }
       });
       
       roomServiceCharges = roomServiceOrders.reduce((total, order) => {
@@ -121,7 +122,8 @@ exports.getCheckout = async (req, res) => {
       const roomServiceOrders = await RoomService.find({
         roomNumber: { $in: roomNumbers },
         paymentStatus: { $ne: 'paid' },
-        status: { $nin: ['cancelled', 'canceled'] }
+        status: { $nin: ['cancelled', 'canceled'] },
+        nonChargeable: { $ne: true }
       });
       
       const restaurantCharges = restaurantOrders.reduce((total, order) => total + (order.amount || 0), 0);
@@ -178,7 +180,8 @@ exports.getCheckoutByBooking = async (req, res) => {
       const roomServiceOrders = await RoomService.find({
         roomNumber: { $in: roomNumbers },
         paymentStatus: { $ne: 'paid' },
-        status: { $nin: ['cancelled', 'canceled'] }
+        status: { $nin: ['cancelled', 'canceled'] },
+        nonChargeable: { $ne: true }
       });
       
       const restaurantCharges = restaurantOrders.reduce((total, order) => total + (order.amount || 0), 0);
@@ -352,10 +355,11 @@ exports.getInvoice = async (req, res) => {
         nonChargeable: { $ne: true }
       });
       
-      // Also check RoomService model for room service orders
+      // Also check RoomService model for room service orders (exclude non-chargeable)
       const roomServiceOrders = await RoomService.find({
         bookingId: booking._id,
-        status: { $nin: ['cancelled', 'canceled'] }
+        status: { $nin: ['cancelled', 'canceled'] },
+        nonChargeable: { $ne: true }
       });
       
       const restaurantCharges = restaurantOrders.reduce((total, order) => {

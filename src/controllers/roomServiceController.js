@@ -155,7 +155,6 @@ exports.getOrderById = async (req, res) => {
 // Update entire order
 exports.updateOrder = async (req, res) => {
   try {
-    const { items, subtotal, totalAmount } = req.body;
     const order = await RoomService.findById(req.params.id);
 
     if (!order) {
@@ -166,12 +165,14 @@ exports.updateOrder = async (req, res) => {
       return res.status(400).json({ message: "Cannot edit delivered or cancelled orders" });
     }
 
-    order.items = items;
-    order.subtotal = subtotal;
-    order.totalAmount = totalAmount;
+    // For PATCH requests, only update provided fields
+    const updatedOrder = await RoomService.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: false }
+    );
     
-    const savedOrder = await order.save();
-    res.json({ success: true, order: savedOrder });
+    res.json({ success: true, order: updatedOrder });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

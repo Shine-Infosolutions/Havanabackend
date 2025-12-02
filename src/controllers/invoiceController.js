@@ -13,58 +13,68 @@ exports.generateInvoiceNumber = async (format = 'monthly', incrementCounter = tr
     switch (format) {
       case 'monthly': // HH/MM/0001 (resets each month)
         const monthKey = `${year}-${month}`;
-        counter = await InvoiceCounter.findOne({ month: monthKey });
-        if (!counter) {
-          counter = new InvoiceCounter({ month: monthKey, counter: 0 });
-        }
-        const nextCount = counter.counter + 1;
         if (incrementCounter) {
-          counter.counter = nextCount;
-          await counter.save();
+          // Use atomic findOneAndUpdate to prevent race conditions
+          counter = await InvoiceCounter.findOneAndUpdate(
+            { month: monthKey },
+            { $inc: { counter: 1 } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+          invoiceNumber = `HH/${month}/${String(counter.counter).padStart(4, '0')}`;
+        } else {
+          // Preview mode - don't increment
+          counter = await InvoiceCounter.findOne({ month: monthKey });
+          const nextCount = (counter?.counter || 0) + 1;
+          invoiceNumber = `HH/${month}/${String(nextCount).padStart(4, '0')}`;
         }
-        invoiceNumber = `HH/${month}/${String(nextCount).padStart(4, '0')}`;
         break;
       
       case 'yearly': // HH/2025/0001 (resets each year)
         const yearKey = `${year}`;
-        counter = await InvoiceCounter.findOne({ month: yearKey });
-        if (!counter) {
-          counter = new InvoiceCounter({ month: yearKey, counter: 0 });
-        }
-        const nextYearCount = counter.counter + 1;
         if (incrementCounter) {
-          counter.counter = nextYearCount;
-          await counter.save();
+          counter = await InvoiceCounter.findOneAndUpdate(
+            { month: yearKey },
+            { $inc: { counter: 1 } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+          invoiceNumber = `HH/${year}/${String(counter.counter).padStart(4, '0')}`;
+        } else {
+          counter = await InvoiceCounter.findOne({ month: yearKey });
+          const nextCount = (counter?.counter || 0) + 1;
+          invoiceNumber = `HH/${year}/${String(nextCount).padStart(4, '0')}`;
         }
-        invoiceNumber = `HH/${year}/${String(nextYearCount).padStart(4, '0')}`;
         break;
         
       case 'continuous': // HH-000001 (never resets)
         const globalKey = 'global';
-        counter = await InvoiceCounter.findOne({ month: globalKey });
-        if (!counter) {
-          counter = new InvoiceCounter({ month: globalKey, counter: 0 });
-        }
-        const nextGlobalCount = counter.counter + 1;
         if (incrementCounter) {
-          counter.counter = nextGlobalCount;
-          await counter.save();
+          counter = await InvoiceCounter.findOneAndUpdate(
+            { month: globalKey },
+            { $inc: { counter: 1 } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+          invoiceNumber = `HH-${String(counter.counter).padStart(6, '0')}`;
+        } else {
+          counter = await InvoiceCounter.findOne({ month: globalKey });
+          const nextCount = (counter?.counter || 0) + 1;
+          invoiceNumber = `HH-${String(nextCount).padStart(6, '0')}`;
         }
-        invoiceNumber = `HH-${String(nextGlobalCount).padStart(6, '0')}`;
         break;
         
       case 'simple': // INV-0001 (simple format)
         const simpleKey = 'simple';
-        counter = await InvoiceCounter.findOne({ month: simpleKey });
-        if (!counter) {
-          counter = new InvoiceCounter({ month: simpleKey, counter: 0 });
-        }
-        const nextSimpleCount = counter.counter + 1;
         if (incrementCounter) {
-          counter.counter = nextSimpleCount;
-          await counter.save();
+          counter = await InvoiceCounter.findOneAndUpdate(
+            { month: simpleKey },
+            { $inc: { counter: 1 } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+          invoiceNumber = `INV-${String(counter.counter).padStart(4, '0')}`;
+        } else {
+          counter = await InvoiceCounter.findOne({ month: simpleKey });
+          const nextCount = (counter?.counter || 0) + 1;
+          invoiceNumber = `INV-${String(nextCount).padStart(4, '0')}`;
         }
-        invoiceNumber = `INV-${String(nextSimpleCount).padStart(4, '0')}`;
         break;
         
       default:

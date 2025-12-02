@@ -63,13 +63,15 @@ const roomServiceSchema = new mongoose.Schema({
   },
   tax: {
     type: Number,
-    required: true,
-    min: 0
+    required: false,
+    min: 0,
+    default: 0
   },
   serviceCharge: {
     type: Number,
-    required: true,
-    min: 0
+    required: false,
+    min: 0,
+    default: 0
   },
   totalAmount: {
     type: Number,
@@ -116,6 +118,10 @@ const roomServiceSchema = new mongoose.Schema({
   notes: {
     type: String,
     default: ''
+  },
+  nonChargeable: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

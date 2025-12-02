@@ -15,6 +15,9 @@ router.get('/:id', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT D
 // Update entire order
 router.put('/:id', auth, roomServiceController.updateOrder);
 
+// Update room service order (PATCH)
+router.patch('/:id', auth, roomServiceController.updateOrder);
+
 // Update order status (Staff, Front Desk)
 router.patch('/:id/status', auth, roomServiceController.updateOrderStatus);
 
