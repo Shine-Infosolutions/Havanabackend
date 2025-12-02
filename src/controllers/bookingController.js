@@ -1271,11 +1271,12 @@ exports.getBookingCharges = async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
     
-    // Get all room services for this booking (exclude cancelled only)
+    // Get all room services for this booking (exclude cancelled and non-chargeable)
     const roomServices = await RoomService.find({
       ...serviceQuery,
       paymentStatus: { $ne: 'paid' },
-      status: { $nin: ['cancelled', 'canceled'] }
+      status: { $nin: ['cancelled', 'canceled'] },
+      nonChargeable: { $ne: true }
     }).sort({ createdAt: -1 });
     
     // Get all restaurant orders for this booking
@@ -1291,7 +1292,8 @@ exports.getBookingCharges = async (req, res) => {
     const restaurantOrders = await RestaurantOrder.find({
       $or: restaurantOrderQueries,
       paymentStatus: { $ne: 'paid' },
-      status: { $nin: ['cancelled', 'canceled'] }
+      status: { $nin: ['cancelled', 'canceled'] },
+      nonChargeable: { $ne: true }
     }).sort({ createdAt: -1 });
     
     // Calculate totals
