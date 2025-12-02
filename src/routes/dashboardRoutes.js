@@ -4,6 +4,6 @@ const dashboardController = require('../controllers/dashboardController');
 const { auth, authorize } = require('../middleware/auth');
 
 // Dashboard stats (Admin, GM, Accounts)
-router.get('/stats',  dashboardController.getDashboardStats);
+router.get('/stats', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.getDashboardStats);
 
 module.exports = router;
