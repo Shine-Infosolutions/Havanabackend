@@ -6,6 +6,10 @@ const invoiceSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  invoiceNumber: {
+    type: String,
+    sparse: true
+  },
   createdAt: {
     type: Date,
     default: Date.now
