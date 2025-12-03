@@ -165,6 +165,20 @@ exports.updateOrder = async (req, res) => {
       return res.status(400).json({ message: "Cannot edit delivered or cancelled orders" });
     }
 
+    // If items are being updated, recalculate totals
+    if (req.body.items) {
+      let subtotal = 0;
+      req.body.items.forEach(item => {
+        // Only add to subtotal if item is not marked as NC
+        const isNC = item.nonChargeable || item.isFree || item.nc;
+        if (!isNC) {
+          subtotal += item.quantity * item.unitPrice;
+        }
+      });
+      req.body.subtotal = subtotal;
+      req.body.totalAmount = subtotal;
+    }
+
     // For PATCH requests, only update provided fields
     const updatedOrder = await RoomService.findByIdAndUpdate(
       req.params.id,
@@ -203,6 +217,46 @@ exports.updateOrderStatus = async (req, res) => {
     order.status = status;
     if (status === "delivered") {
       order.deliveryTime = new Date();
+    }
+
+    await order.save();
+    res.json({ success: true, order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Update NC status for room service items
+exports.updateNCStatus = async (req, res) => {
+  try {
+    const { nonChargeable, itemIndex } = req.body;
+    const order = await RoomService.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (itemIndex !== undefined) {
+      // Update item-level NC status
+      if (itemIndex >= 0 && itemIndex < order.items.length) {
+        order.items[itemIndex].nonChargeable = nonChargeable;
+        order.items[itemIndex].isFree = nonChargeable;
+        order.items[itemIndex].nc = nonChargeable;
+        
+        // Recalculate totals
+        let subtotal = 0;
+        order.items.forEach(item => {
+          const isNC = item.nonChargeable || item.isFree || item.nc;
+          if (!isNC) {
+            subtotal += item.quantity * item.unitPrice;
+          }
+        });
+        order.subtotal = subtotal;
+        order.totalAmount = subtotal;
+      }
+    } else {
+      // Update order-level NC status
+      order.nonChargeable = nonChargeable;
     }
 
     await order.save();

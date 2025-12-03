@@ -54,6 +54,18 @@ const roomServiceSchema = new mongoose.Schema({
     specialInstructions: {
       type: String,
       default: ''
+    },
+    nonChargeable: {
+      type: Boolean,
+      default: false
+    },
+    isFree: {
+      type: Boolean,
+      default: false
+    },
+    nc: {
+      type: Boolean,
+      default: false
     }
   }],
   subtotal: {

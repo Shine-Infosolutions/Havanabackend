@@ -24,6 +24,9 @@ router.patch('/:id/status', auth, authorize(['ADMIN','STAFF', 'FRONT DESK']), ro
 // Update payment status (Accounts, Admin)
 router.patch('/:id/payment', auth, authorize(['ACCOUNTS', 'ADMIN',  'FRONT DESK']), roomServiceController.updatePaymentStatus);
 
+// Update NC status (Admin, Front Desk)
+router.patch('/:id/nc', auth, authorize(['ADMIN', 'FRONT DESK']), roomServiceController.updateNCStatus);
+
 // Generate KOT (Staff, Front Desk)
 router.post('/:id/kot', auth, authorize(['ADMIN', 'STAFF', 'FRONT DESK']), roomServiceController.generateKOT);
 
