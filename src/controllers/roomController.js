@@ -1,6 +1,26 @@
 const Room = require("../models/Room.js");
 const Category = require("../models/Category.js");
 const Booking = require("../models/Booking.js");
+const cloudinary = require('../utils/cloudinary');
+
+// Upload base64 image to Cloudinary
+const uploadBase64ToCloudinary = async (base64String) => {
+  try {
+    if (!process.env.CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY === 'your_api_key') {
+      console.warn('Cloudinary not configured, skipping image upload');
+      return base64String;
+    }
+    
+    const result = await cloudinary.uploader.upload(base64String, {
+      folder: 'havana-rooms',
+      transformation: [{ width: 800, height: 600, crop: 'limit' }]
+    });
+    return result.secure_url;
+  } catch (error) {
+    console.warn('Image upload failed, using base64 fallback:', error.message);
+    return base64String;
+  }
+};
 
 // Create a new room
 exports.createRoom = async (req, res) => {
@@ -16,6 +36,19 @@ exports.createRoom = async (req, res) => {
       description,
       images,
     } = req.body;
+    // Handle image uploads
+    let uploadedImages = [];
+    if (images && Array.isArray(images)) {
+      for (const image of images) {
+        if (image.startsWith('data:')) {
+          const uploadedUrl = await uploadBase64ToCloudinary(image);
+          uploadedImages.push(uploadedUrl);
+        } else {
+          uploadedImages.push(image);
+        }
+      }
+    }
+    
     const room = new Room({
       title,
       categoryId: category,
@@ -25,7 +58,7 @@ exports.createRoom = async (req, res) => {
       is_reserved,
       status,
       description,
-      images,
+      images: uploadedImages,
     });
     await room.save();
 
@@ -112,6 +145,21 @@ exports.getRoomById = async (req, res) => {
 exports.updateRoom = async (req, res) => {
   try {
     const updates = req.body;
+    
+    // Handle image uploads if provided
+    if (updates.images && Array.isArray(updates.images)) {
+      const uploadedImages = [];
+      for (const image of updates.images) {
+        if (image.startsWith('data:')) {
+          const uploadedUrl = await uploadBase64ToCloudinary(image);
+          uploadedImages.push(uploadedUrl);
+        } else {
+          uploadedImages.push(image);
+        }
+      }
+      updates.images = uploadedImages;
+    }
+    
     const room = await Room.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
