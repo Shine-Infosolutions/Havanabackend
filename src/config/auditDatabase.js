@@ -17,28 +17,34 @@ const connectAuditDB = async () => {
     console.log('Connecting to audit database...');
     
     auditConnection = mongoose.createConnection(auditDbUri, {
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 10000,
-      connectTimeoutMS: 5000,
-      maxPoolSize: 5,
-      minPoolSize: 1,
-      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 3000,
+      socketTimeoutMS: 5000,
+      connectTimeoutMS: 3000,
+      maxPoolSize: 3,
+      minPoolSize: 0,
+      maxIdleTimeMS: 10000,
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      family: 4
     });
 
-    // Wait for connection to be established
-    await new Promise((resolve, reject) => {
-      auditConnection.once('connected', () => {
-        console.log('✅ Audit database connected successfully');
-        resolve();
-      });
-      
-      auditConnection.once('error', (err) => {
-        console.error('❌ Audit database connection error:', err.message);
-        reject(err);
-      });
-    });
+    // Wait for connection with timeout
+    await Promise.race([
+      new Promise((resolve, reject) => {
+        auditConnection.once('connected', () => {
+          console.log('✅ Audit database connected successfully');
+          resolve();
+        });
+        
+        auditConnection.once('error', (err) => {
+          console.error('❌ Audit database connection error:', err.message);
+          reject(err);
+        });
+      }),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Audit connection timeout')), 5000);
+      })
+    ]);
 
     auditConnection.on('disconnected', () => {
       console.log('⚠️ Audit database disconnected');
@@ -48,7 +54,10 @@ const connectAuditDB = async () => {
     return auditConnection;
   } catch (error) {
     console.error('Failed to connect to audit database:', error.message);
-    auditConnection = null;
+    if (auditConnection) {
+      auditConnection.close();
+      auditConnection = null;
+    }
     throw error;
   }
 };
@@ -59,7 +68,7 @@ const getAuditConnection = async () => {
       auditConnection = await connectAuditDB();
     } catch (error) {
       console.error('Failed to get audit connection:', error.message);
-      throw new Error('Audit database not connected');
+      return null; // Return null instead of throwing error
     }
   }
   return auditConnection;

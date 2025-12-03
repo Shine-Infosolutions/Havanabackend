@@ -154,9 +154,10 @@ mongoose.connection.on('error', (err) => {
 // Initial connection attempt
 connectToMongoDB();
 
-// Initialize audit database connection
+// Initialize audit database connection (optional)
 connectAuditDB().catch(error => {
-  console.error('Failed to connect to audit database:', error.message);
+  console.error('❌ Audit database connection failed:', error.message);
+  console.log('⚠️ Server will continue without audit logging');
 });
 
 // Middleware to add DB connection status to request object
