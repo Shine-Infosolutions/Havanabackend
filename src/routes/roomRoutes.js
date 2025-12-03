@@ -5,7 +5,7 @@ const { auth, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 // Add room (Admin, GM)
-router.post('/add', auth, authorize(['ADMIN', 'GM']), upload.array('images', 5), roomController.createRoom);
+router.post('/add', auth, authorize(['ADMIN', 'GM','FRONT DESK']), upload.array('images', 5), roomController.createRoom);
 
 // Get all rooms (All roles)
 router.get('/all', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), roomController.getRooms);
@@ -17,7 +17,7 @@ router.get('/available', auth, authorize(['FRONT DESK', 'STAFF', 'ADMIN', 'GM'])
 router.get('/get/:id', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), roomController.getRoomById);
 
 // Update room (Admin, GM)
-router.put('/update/:id', auth, authorize(['ADMIN', 'GM']), upload.array('images', 5), roomController.updateRoom);
+router.put('/update/:id', auth, authorize(['ADMIN', 'GM','FRONT DESK']), upload.array('images', 5), roomController.updateRoom);
 
 // Delete room (Admin only)
 router.delete('/delete/:id', auth, authorize(['ADMIN']), roomController.deleteRoom);

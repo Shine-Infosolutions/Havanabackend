@@ -4,7 +4,7 @@ const categoryController = require('../controllers/categoryController');
 const { auth, authorize } = require('../middleware/auth');
 
 // Create a new room category (Admin, GM)
-router.post('/add', auth, authorize(['ADMIN', 'GM']), categoryController.createCategory);
+router.post('/add', auth, authorize(['ADMIN', 'GM','FRONT DESK']), categoryController.createCategory);
 
 // Get all room categories (All roles)
 router.get('/all', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), categoryController.getCategories);
@@ -13,7 +13,7 @@ router.get('/all', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT D
 router.get('/get/:id', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), categoryController.getCategoryById);
 
 // Update a room category (Admin, GM)
-router.put('/update/:id', auth, authorize(['ADMIN', 'GM']), categoryController.updateCategory);
+router.put('/update/:id', auth, authorize(['ADMIN', 'GM','FRONT DESK']), categoryController.updateCategory);
 
 // Delete a room category (Admin only)
 router.delete('/delete/:id', auth, authorize('ADMIN'), categoryController.deleteCategory);
