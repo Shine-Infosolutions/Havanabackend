@@ -87,12 +87,13 @@ const bookingSchema = new mongoose.Schema({
     enum: ['Pending', 'Paid', 'Failed', 'Partial'],
     default: 'Pending'
   },
+  transactionId: { type: String },
 
   // Multiple Advance Payments
   advancePayments: [{
     amount: { type: Number, required: true },
     paymentMode: { type: String, required: true },
-    paymentDate: { type: Date, required: true },
+    paymentDate: { type: Date, default: Date.now },
     reference: { type: String },
     notes: { type: String },
     createdAt: { type: Date, default: Date.now }

@@ -2,6 +2,7 @@ const Booking = require("../models/Booking.js");
 const Category = require("../models/Category.js");
 const Room = require("../models/Room.js");
 const { getAuditLogModel } = require('../models/AuditLogModel');
+const InvoiceCounter = require('../models/InvoiceCounter');
 const mongoose = require('mongoose');
 const cloudinary = require('../utils/cloudinary');
 
@@ -85,6 +86,30 @@ const generateGRC = async () => {
   return `GRC${nextNumber.toString().padStart(4, '0')}`;
 };
 
+// 🔹 Generate sequential invoice number (monthly reset)
+const generateInvoiceNumber = async () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const monthKey = `${year}-${month}`;
+  
+  try {
+    // Use atomic findOneAndUpdate to prevent race conditions
+    const counter = await InvoiceCounter.findOneAndUpdate(
+      { month: monthKey },
+      { $inc: { counter: 1 } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    
+    return `HH/${month}/${String(counter.counter).padStart(4, '0')}`;
+  } catch (error) {
+    console.error('Invoice number generation error:', error);
+    // Fallback to timestamp-based number if counter fails
+    const timestamp = Date.now().toString().slice(-4);
+    return `HH/${month}/${timestamp}`;
+  }
+};
+
 // Book a room for a category (single or multiple)
 exports.bookRoom = async (req, res) => {
   try {
@@ -154,6 +179,7 @@ exports.bookRoom = async (req, res) => {
       }
 
       const grcNo = await generateGRC();
+      const invoiceNumber = await generateInvoiceNumber();
       const bookedRoomNumbers = roomsToBook.map(room => room.room_number);
 
       // Calculate tax amounts using dynamic rates
@@ -249,7 +275,7 @@ exports.bookRoom = async (req, res) => {
       // Create single booking document for all rooms
       const booking = new Booking({
         grcNo,
-        invoiceNumber: extraDetails.invoiceNumber,
+        invoiceNumber,
         categoryId,
         bookingDate: extraDetails.bookingDate || new Date(),
         numberOfRooms: roomsToBook.length,
@@ -639,6 +665,27 @@ exports.updateBooking = async (req, res) => {
 
     // Store original data for audit log
     const originalData = booking.toObject();
+
+    // Handle status change to Checked In - validate room availability
+    if (updates.status && updates.status === 'Checked In') {
+      const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(num => num.trim()) : [];
+      
+      // Check if any of the rooms have an active booking that's already checked in
+      for (const roomNum of roomNumbers) {
+        const activeBooking = await Booking.findOne({
+          _id: { $ne: bookingId }, // Exclude current booking
+          roomNumber: { $regex: new RegExp(`(^|,)\\s*${roomNum}\\s*(,|$)`) },
+          status: 'Checked In',
+          isActive: true
+        });
+        
+        if (activeBooking) {
+          return res.status(400).json({ 
+            error: `Cannot check in: Room ${roomNum} is currently occupied by another guest (GRC: ${activeBooking.grcNo}, Invoice: ${activeBooking.invoiceNumber || 'N/A'}). Please check out the current guest first.`
+          });
+        }
+      }
+    }
 
     // Handle status change to Cancelled or Checked Out
     if (updates.status && (updates.status === 'Cancelled' || updates.status === 'Checked Out')) {
