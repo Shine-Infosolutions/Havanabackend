@@ -71,4 +71,7 @@ router.get("/charges/booking/:bookingId", auth, authorize(['FRONT DESK', 'ACCOUN
 // Get booking charges by GRC (Front Desk, Accounts, Admin)
 router.get("/charges/grc/:grcNo", auth, authorize(['FRONT DESK', 'ACCOUNTS', 'ADMIN']), bookingController.getBookingCharges);
 
+// Waive late checkout fine (Admin, GM)
+router.post("/waive-fine/:bookingId", auth, authorize(['ADMIN', 'GM','FRONT DESK']), bookingController.waiveLateCheckoutFine);
+
 module.exports = router;

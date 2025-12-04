@@ -17,6 +17,23 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     default: '12:00',
     immutable: true 
+  },
+  
+  // 🔹 Exact Check-in/Check-out Times
+  actualCheckInTime: { type: Date },  // Exact timestamp when guest checked in
+  actualCheckOutTime: { type: Date }, // Exact timestamp when guest checked out
+  
+  // 🔹 Late Checkout Fine System
+  lateCheckoutFine: {
+    amount: { type: Number, default: 0 },
+    minutesLate: { type: Number, default: 0 },
+    finePerHour: { type: Number, default: 500 }, // ₹500 per hour after grace period
+    gracePeriodMinutes: { type: Number, default: 15 }, // 15 minutes grace period
+    applied: { type: Boolean, default: false },
+    appliedAt: { type: Date },
+    waived: { type: Boolean, default: false },
+    waivedBy: { type: String },
+    waivedReason: { type: String }
   },  
 
   salutation: { type: String, enum: ['mr.', 'mrs.', 'ms.', 'dr.', 'other'], default: 'mr.' },
@@ -210,6 +227,43 @@ bookingSchema.pre('save', async function(next) {
     this.invoiceNumber = `HH/${month}/${sequence}`;
     
     console.log('✅ Generated invoice:', this.invoiceNumber);
+  }
+  
+  // 🔹 Calculate Late Checkout Fine
+  if (this.actualCheckOutTime && this.status === 'Checked Out' && !this.lateCheckoutFine.applied) {
+    const checkoutDate = new Date(this.checkOutDate);
+    const [hours, minutes] = this.timeOut.split(':').map(Number);
+    
+    // Create expected checkout time without mutating original date
+    const expectedCheckoutTime = new Date(checkoutDate.getFullYear(), checkoutDate.getMonth(), checkoutDate.getDate(), hours, minutes, 0, 0);
+    
+    const actualCheckout = new Date(this.actualCheckOutTime);
+    const timeDiffMs = actualCheckout - expectedCheckoutTime;
+    
+    console.log(`🔍 Debug: Expected: ${expectedCheckoutTime.toISOString()}, Actual: ${actualCheckout.toISOString()}, Diff: ${timeDiffMs}ms`);
+    
+    if (timeDiffMs > 0) {
+      const minutesLate = Math.ceil(timeDiffMs / (1000 * 60));
+      const gracePeriod = this.lateCheckoutFine.gracePeriodMinutes || 15;
+      
+      // Validation: Only apply fine if late by reasonable amount (max 24 hours)
+      if (minutesLate > gracePeriod && minutesLate <= 1440) { // 1440 minutes = 24 hours
+        const chargeableMinutes = minutesLate - gracePeriod;
+        const chargeableHours = Math.ceil(chargeableMinutes / 60); // Round up to next hour
+        const fineAmount = chargeableHours * (this.lateCheckoutFine.finePerHour || 500);
+        
+        this.lateCheckoutFine.minutesLate = minutesLate;
+        this.lateCheckoutFine.amount = fineAmount;
+        this.lateCheckoutFine.applied = true;
+        this.lateCheckoutFine.appliedAt = new Date();
+        
+        console.log(`⏰ Late checkout fine applied: ₹${fineAmount} for ${chargeableHours} hour(s) (${chargeableMinutes} minutes late)`);
+      } else if (minutesLate > 1440) {
+        console.log(`⚠️ Checkout time difference too large (${minutesLate} minutes). Fine not applied.`);
+      }
+    } else {
+      console.log(`✅ Early checkout - no fine applied`);
+    }
   }
   
   next();

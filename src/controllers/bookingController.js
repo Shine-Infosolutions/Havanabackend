@@ -641,7 +641,7 @@ exports.updateBooking = async (req, res) => {
     // Store original data for audit log
     const originalData = booking.toObject();
 
-    // Handle status change to Checked In - validate room availability
+    // Handle status change to Checked In - validate room availability and set actual check-in time
     if (updates.status && updates.status === 'Checked In') {
       const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(num => num.trim()) : [];
       
@@ -660,6 +660,14 @@ exports.updateBooking = async (req, res) => {
           });
         }
       }
+      
+      // Set actual check-in time
+      booking.actualCheckInTime = new Date();
+    }
+    
+    // Handle status change to Checked Out - set actual check-out time
+    if (updates.status && updates.status === 'Checked Out') {
+      booking.actualCheckOutTime = new Date();
     }
 
     // Handle status change to Cancelled or Checked Out
@@ -749,7 +757,10 @@ exports.updateBooking = async (req, res) => {
       'invoiceNumber',
 
       // Multiple Advance Payment fields
-      'advancePayments', 'totalAdvanceAmount', 'balanceAmount'
+      'advancePayments', 'totalAdvanceAmount', 'balanceAmount',
+      
+      // Exact check-in/check-out times
+      'actualCheckInTime', 'actualCheckOutTime'
     ];
 
     simpleFields.forEach(field => {
@@ -1391,6 +1402,46 @@ exports.getNextGRC = async (req, res) => {
   try {
     const grcNo = await generateGRC();
     res.json({ success: true, grcNo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// 🔹 Waive late checkout fine
+exports.waiveLateCheckoutFine = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { reason, waivedBy } = req.body;
+    
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    
+    if (!booking.lateCheckoutFine.applied) {
+      return res.status(400).json({ error: 'No late checkout fine to waive' });
+    }
+    
+    if (booking.lateCheckoutFine.waived) {
+      return res.status(400).json({ error: 'Late checkout fine already waived' });
+    }
+    
+    // Store original data for audit log
+    const originalData = booking.toObject();
+    
+    // Waive the fine
+    booking.lateCheckoutFine.waived = true;
+    booking.lateCheckoutFine.waivedBy = waivedBy || req.user?.username || 'System';
+    booking.lateCheckoutFine.waivedReason = reason || 'Management discretion';
+    
+    await booking.save();
+    
+    // Create audit log
+    await createAuditLog('WAIVE_FINE', booking._id, req.user?.id, req.user?.role, originalData, booking.toObject(), req);
+    
+    res.json({
+      success: true,
+      message: `Late checkout fine of ₹${booking.lateCheckoutFine.amount} waived successfully`,
+      booking
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
