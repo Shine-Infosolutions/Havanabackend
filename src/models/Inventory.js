@@ -3,10 +3,10 @@ const mongoose = require('mongoose');
 const inventorySchema = new mongoose.Schema({
   name: { type: String, required: true },
   itemCode: { type: String, required: true, unique: true },
-  category: { 
-    type: String, 
-    required: true,
-    enum: ['Housekeeping', 'Consumables', 'Kitchen', 'Linen', 'Maintenance']
+  categoryId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'InventoryCategory',
+    required: true
   },
   description: { type: String, default: '' },
   currentStock: { type: Number, default: 0 },

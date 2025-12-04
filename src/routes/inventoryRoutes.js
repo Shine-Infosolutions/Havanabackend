@@ -6,6 +6,9 @@ const { auth, authorize } = require('../middleware/auth');
 // Get all inventory items (All roles)
 router.get('/items', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), inventoryController.getAllItems);
 
+// Get inventory item by ID (All roles)
+router.get('/items/:id', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), inventoryController.getItemById);
+
 // Create new inventory item (Admin, GM)
 router.post('/items', auth, authorize(['ADMIN', 'GM','FRONT DESK']), inventoryController.createItem);
 
@@ -16,7 +19,7 @@ router.put('/items/:id', auth, authorize(['ADMIN', 'GM', 'STAFF','FRONT DESK']),
 router.delete('/items/:id', auth, authorize('ADMIN'), inventoryController.deleteItem);
 
 // Get items by category (All roles)
-router.get('/category/:category', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), inventoryController.getByCategory);
+router.get('/category/:categoryId', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), inventoryController.getByCategory);
 
 // Stock in operation (Staff, Admin, GM)
 router.post('/items/:id/stock-in', auth, authorize(['STAFF', 'ADMIN', 'GM','FRONT DESK']), inventoryController.stockIn);

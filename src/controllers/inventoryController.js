@@ -3,8 +3,21 @@ const { Inventory, StockMovement } = require('../models/Inventory');
 // Get all inventory items
 exports.getAllItems = async (req, res) => {
   try {
-    const items = await Inventory.find().sort({ createdAt: -1 });
+    const items = await Inventory.find().populate('categoryId', 'name').sort({ createdAt: -1 });
     res.json({ success: true, items });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get inventory item by ID
+exports.getItemById = async (req, res) => {
+  try {
+    const item = await Inventory.findById(req.params.id).populate('categoryId', 'name');
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    res.json({ success: true, item });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -15,6 +28,7 @@ exports.createItem = async (req, res) => {
   try {
     const item = new Inventory(req.body);
     await item.save();
+    await item.populate('categoryId', 'name');
     res.status(201).json({ success: true, item });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -28,7 +42,7 @@ exports.updateItem = async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    );
+    ).populate('categoryId', 'name');
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -54,8 +68,8 @@ exports.deleteItem = async (req, res) => {
 // Get inventory by category
 exports.getByCategory = async (req, res) => {
   try {
-    const { category } = req.params;
-    const items = await Inventory.find({ category }).sort({ name: 1 });
+    const { categoryId } = req.params;
+    const items = await Inventory.find({ categoryId }).populate('categoryId', 'name').sort({ name: 1 });
     res.json({ success: true, items });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -75,7 +89,7 @@ exports.searchItems = async (req, res) => {
         { description: searchRegex },
         { 'supplier.name': searchRegex }
       ]
-    }).sort({ name: 1 });
+    }).populate('categoryId', 'name').sort({ name: 1 });
     
     res.json({ success: true, items });
   } catch (error) {
@@ -165,7 +179,7 @@ exports.getLowStockItems = async (req, res) => {
   try {
     const items = await Inventory.find({
       $expr: { $lte: ['$currentStock', '$minStockLevel'] }
-    }).sort({ currentStock: 1 });
+    }).populate('categoryId', 'name').sort({ currentStock: 1 });
     res.json({ success: true, items });
   } catch (error) {
     res.status(500).json({ error: error.message });
