@@ -31,6 +31,7 @@ const dashboardRoutes = require("./src/routes/dashboardRoutes.js");
 const cashTransactionRoutes = require("./src/routes/CashTransactionRoutes.js");
 const nightAuditRoutes = require("./src/routes/nightAuditRoutes.js");
 const subReportsRoutes = require("./src/routes/subReportsRoutes.js");
+const reportRoutes = require("./src/routes/reportRoutes.js");
 const { connectAuditDB } = require("./src/config/auditDatabase.js");
 const path = require("path");
 // Initialize express app
@@ -196,6 +197,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/cash-transactions", cashTransactionRoutes);
 app.use("/api/night-audit", nightAuditRoutes);
 app.use("/api/sub-reports", subReportsRoutes);
+app.use("/api/reports", reportRoutes);
 
 
 // Health check endpoint
