@@ -24,6 +24,8 @@ const roomInventoryChecklistRoutes = require("./src/routes/roomInventoryChecklis
 const menuItemRoutes = require("./src/routes/menuItemRoutes.js");
 const inventoryRoutes = require("./src/routes/inventoryRoutes.js");
 const inventoryCategoryRoutes = require("./src/routes/inventoryCategoryRoutes.js");
+const vendorRoutes = require("./src/routes/vendorRoutes.js");
+const laundryItemRoutes = require("./src/routes/laundryItemRoutes.js");
 const roomServiceRoutes = require("./src/routes/roomServiceRoutes.js");
 const invoiceRoutes = require("./src/routes/invoiceRoutes.js");
 const auditRoutes = require("./src/routes/auditRoutes.js");
@@ -190,6 +192,8 @@ app.use("/api/room-inventory-checklists", roomInventoryChecklistRoutes);
 app.use("/api/menu-items", menuItemRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/inventory-categories", inventoryCategoryRoutes);
+app.use("/api/vendors", vendorRoutes);
+app.use("/api/laundry-items", laundryItemRoutes);
 app.use("/api/room-service", roomServiceRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/audit", auditRoutes);
