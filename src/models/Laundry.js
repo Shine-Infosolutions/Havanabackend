@@ -164,8 +164,12 @@ laundrySchema.post(/^find/, async function(docs) {
       
       await doc.populate({
         path: 'items.rateId',
-        select: 'itemName rate category serviceType unit vendorId isActive',
-        match: populateQuery
+        select: 'itemName rate categoryId categoryType serviceType unit vendorId isActive',
+        match: populateQuery,
+        populate: {
+          path: 'categoryId',
+          select: 'categoryName description isActive'
+        }
       });
     }
   }
