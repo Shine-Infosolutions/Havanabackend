@@ -43,6 +43,7 @@ const laundrySchema = new mongoose.Schema({
       },
       calculatedAmount: { type: Number, default: 0 },
       damageReported: { type: Boolean, default: false },
+      serviceType: { type: String}, //dry_clean", "wash", "press
       itemNotes: String,
     }
   ],
@@ -101,7 +102,7 @@ const laundrySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-// Auto-calc total + auto-fill item name from LaundryItem
+// Auto-calc total + auto-fill item details from LaundryItem
 laundrySchema.pre("save", async function (next) {
   if (this.items?.length) {
     let total = 0;
@@ -111,6 +112,7 @@ laundrySchema.pre("save", async function (next) {
           const rateDoc = await mongoose.model("LaundryItem").findById(item.rateId);
           if (rateDoc) {
             if (!item.itemName) item.itemName = rateDoc.itemName;
+            if (!item.serviceType && item.serviceType !== '') item.serviceType = item.serviceType || '';
             item.calculatedAmount = rateDoc.rate * (item.quantity || 1);
           }
         } catch (error) {
@@ -164,7 +166,7 @@ laundrySchema.post(/^find/, async function(docs) {
       
       await doc.populate({
         path: 'items.rateId',
-        select: 'itemName rate categoryId categoryType serviceType unit vendorId isActive',
+        select: 'itemName rate categoryId unit vendorId isActive',
         match: populateQuery,
         populate: {
           path: 'categoryId',

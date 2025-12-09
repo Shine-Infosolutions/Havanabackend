@@ -4,11 +4,11 @@ const LaundryVendor = require('../models/LaundryVendor.js');
 // Create a new laundry item
 exports.createLaundryItem = async (req, res) => {
   try {
-    const { categoryId, categoryType, serviceType, itemName, rate, unit, vendorId, isActive } = req.body;
+    const { categoryId, itemName, rate, unit, vendorId, isActive } = req.body;
     
     // Basic validation
-    if (!serviceType || !itemName || !rate) {
-      return res.status(400).json({ error: 'Service type, item name, and rate are required' });
+    if (!itemName || !rate) {
+      return res.status(400).json({ error: 'Item name and rate are required' });
     }
     
     if (rate <= 0) {
@@ -26,7 +26,7 @@ exports.createLaundryItem = async (req, res) => {
       }
     }
     
-    const laundryItem = new LaundryItem({ categoryId, categoryType, serviceType, itemName, rate, unit, vendorId, isActive });
+    const laundryItem = new LaundryItem({ categoryId, itemName, rate, unit, vendorId, isActive });
     await laundryItem.save();
     res.status(201).json({ success: true, laundryItem });
   } catch (error) {
@@ -39,7 +39,7 @@ exports.getLaundryItems = async (req, res) => {
   try {
     const laundryItems = await LaundryItem.find()
       .populate('vendorId', 'vendorName')
-      .sort({ categoryType: 1, itemName: 1 })
+      .sort({ itemName: 1 })
       .maxTimeMS(5000)
       .lean()
       .exec();
@@ -67,7 +67,7 @@ exports.getLaundryItemById = async (req, res) => {
 // Update a laundry item
 exports.updateLaundryItem = async (req, res) => {
   try {
-    const { categoryId, categoryType, serviceType, itemName, rate, unit, vendorId, isActive } = req.body;
+    const { categoryId, itemName, rate, unit, vendorId, isActive } = req.body;
     
     // Validate vendor if provided
     if (vendorId) {
@@ -82,7 +82,7 @@ exports.updateLaundryItem = async (req, res) => {
     
     const laundryItem = await LaundryItem.findByIdAndUpdate(
       req.params.id,
-      { categoryId, categoryType, serviceType, itemName, rate, unit, vendorId, isActive },
+      { categoryId, itemName, rate, unit, vendorId, isActive },
       { new: true, runValidators: true }
     ).populate('vendorId', 'vendorName');
     if (!laundryItem) return res.status(404).json({ error: 'Laundry item not found' });
@@ -103,19 +103,17 @@ exports.deleteLaundryItem = async (req, res) => {
   }
 };
 
-// Get laundry items by category type
+// Get laundry items by category name
 exports.getLaundryItemsByCategory = async (req, res) => {
   try {
     const { category } = req.params;
-    const validCategories = ['gentlemen', 'ladies', 'Hotel Laundry'];
     
-    if (!validCategories.includes(category)) {
-      return res.status(400).json({ error: 'Invalid category. Valid categories: gentlemen, ladies, Hotel Laundry' });
-    }
-    
-    const laundryItems = await LaundryItem.find({ categoryType: category, isActive: true })
+    const laundryItems = await LaundryItem.find({ isActive: true })
+      .populate('categoryId', 'categoryName')
       .populate('vendorId', 'vendorName')
-      .sort({ itemName: 1 });
+      .sort({ itemName: 1 })
+      .then(items => items.filter(item => item.categoryId && item.categoryId.categoryName === category));
+    
     res.json({ success: true, laundryItems });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -142,7 +140,7 @@ exports.getLaundryItemsByVendor = async (req, res) => {
     const { vendorId } = req.params;
     const laundryItems = await LaundryItem.find({ vendorId, isActive: true })
       .populate('vendorId', 'vendorName')
-      .sort({ categoryType: 1, itemName: 1 });
+      .sort({ itemName: 1 });
     res.json({ success: true, laundryItems });
   } catch (error) {
     res.status(500).json({ error: error.message });

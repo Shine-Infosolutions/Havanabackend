@@ -158,7 +158,7 @@ exports.getAvailableItems = async (req, res) => {
       query.vendorId = { $exists: false };
     }
     
-    const items = await LaundryItem.find(query).sort({ categoryType: 1, itemName: 1 });
+    const items = await LaundryItem.find(query).sort({ itemName: 1 });
     res.json({ success: true, items });
   } catch (err) {
     res.status(500).json({ error: err.message });
