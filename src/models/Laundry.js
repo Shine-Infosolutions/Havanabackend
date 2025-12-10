@@ -40,7 +40,7 @@ const laundrySchema = new mongoose.Schema({
     serviceType: String,
     itemNotes: String
   }],
-  specialInstructions: String,
+  specialInstructions: String, //notes
   laundryStatus: {
     type: String,
     enum: ["pending", "picked_up", "ready", "delivered", "cancelled"],
