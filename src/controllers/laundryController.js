@@ -82,7 +82,7 @@ exports.getAllLaundryOrders = async (req, res) => {
       };
     });
     
-    res.json({ success: true, orders: ordersWithSummary });
+    res.json(ordersWithSummary);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -505,7 +505,7 @@ exports.getAllLossReports = async (req, res) => {
     }
     
     const reports = await LaundryLoss.find(query).populate('orderId').sort({ createdAt: -1 });
-    res.json({ success: true, reports });
+    res.json(reports);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -532,6 +532,38 @@ exports.updateLossReportStatus = async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!report) return res.status(404).json({ error: 'Loss report not found' });
+    
+    // If status is resolved, update the laundry order items to remove 'lost' status
+    if (status === 'resolved' && report.orderId && report.lostItems.length > 0) {
+      const order = await Laundry.findById(report.orderId);
+      if (order) {
+        report.lostItems.forEach(lostItem => {
+          const item = order.items.id(lostItem.itemId);
+          if (item && item.status === 'lost') {
+            item.status = 'delivered';
+            item.damageReported = false;
+            item.itemNotes = item.itemNotes ? `${item.itemNotes} - RESOLVED` : 'RESOLVED';
+          }
+        });
+        await order.save();
+      }
+    }
+    
+    // If status is compensated, mark items as non-chargeable
+    if (status === 'compensated' && report.orderId && report.lostItems.length > 0) {
+      const order = await Laundry.findById(report.orderId);
+      if (order) {
+        report.lostItems.forEach(lostItem => {
+          const item = order.items.id(lostItem.itemId);
+          if (item) {
+            item.nonChargeable = true;
+            item.itemNotes = item.itemNotes ? `${item.itemNotes} - COMPENSATED` : 'COMPENSATED';
+          }
+        });
+        await order.save();
+      }
+    }
+    
     res.json({ success: true, report });
   } catch (err) {
     res.status(400).json({ error: err.message });

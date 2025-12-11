@@ -1283,19 +1283,23 @@ exports.getBookingCharges = async (req, res) => {
     const { bookingId, grcNo } = req.params;
     const RoomService = require('../models/RoomService');
     const RestaurantOrder = require('../models/RestaurantOrder');
+    const Laundry = require('../models/Laundry');
     
     let booking;
     let serviceQuery = {};
     let restaurantQuery = {};
+    let laundryQuery = {};
     
     if (bookingId) {
       booking = await Booking.findById(bookingId).populate('categoryId');
       serviceQuery.bookingId = bookingId;
       restaurantQuery.bookingId = bookingId;
+      laundryQuery.bookingId = bookingId;
     } else if (grcNo) {
       booking = await Booking.findOne({ grcNo }).populate('categoryId');
       serviceQuery.grcNo = grcNo;
       restaurantQuery.grcNo = grcNo;
+      laundryQuery.grcNo = grcNo;
     } else {
       return res.status(400).json({ error: 'Either bookingId or grcNo is required' });
     }
@@ -1329,9 +1333,27 @@ exports.getBookingCharges = async (req, res) => {
       nonChargeable: { $ne: true }
     }).sort({ createdAt: -1 });
     
-    // Calculate totals
+    // Get all laundry orders for this booking
+    const laundryOrderQueries = [laundryQuery];
+    
+    // Also search by room number if available
+    if (booking.roomNumber) {
+      const roomNumbers = booking.roomNumber.split(',').map(num => num.trim());
+      laundryOrderQueries.push({ roomNumber: { $in: roomNumbers } });
+    }
+    
+    const laundryOrders = await Laundry.find({
+      $or: laundryOrderQueries,
+      laundryStatus: { $nin: ['cancelled', 'canceled'] }
+    }).sort({ createdAt: -1 });
+    
+    // Calculate totals excluding non-chargeable items
     const totalServiceCharges = roomServices.reduce((sum, service) => sum + (service.totalAmount || 0), 0);
     const totalRestaurantCharges = restaurantOrders.reduce((sum, order) => sum + (order.amount || 0), 0);
+    const totalLaundryCharges = laundryOrders.reduce((sum, order) => {
+      const chargeableAmount = order.items.filter(item => !item.nonChargeable && item.status !== 'lost').reduce((itemSum, item) => itemSum + (item.calculatedAmount || 0), 0);
+      return sum + chargeableAmount;
+    }, 0);
     
     // Prepare response with booking details and all charges
     const charges = {
@@ -1379,15 +1401,27 @@ exports.getBookingCharges = async (req, res) => {
         paymentStatus: order.paymentStatus,
         createdAt: order.createdAt
       })),
+      laundryOrders: laundryOrders.map(order => ({
+        type: 'laundry',
+        orderId: order._id,
+        orderType: order.orderType,
+        roomNumber: order.roomNumber,
+        serviceType: order.serviceType,
+        items: order.items,
+        totalAmount: order.totalAmount,
+        laundryStatus: order.laundryStatus,
+        createdAt: order.createdAt
+      })),
       summary: {
         totalRoomCharges: booking.rate || 0,
         totalServiceCharges,
         totalRestaurantCharges,
-        subtotal: (booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges,
-        cgstAmount: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * (booking.cgstRate || 0.025) * 100) / 100,
-        sgstAmount: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * (booking.sgstRate || 0.025) * 100) / 100,
-        totalTax: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * ((booking.cgstRate || 0.025) + (booking.sgstRate || 0.025)) * 100) / 100,
-        grandTotal: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges) * (1 + (booking.cgstRate || 0.025) + (booking.sgstRate || 0.025)) * 100) / 100
+        totalLaundryCharges,
+        subtotal: (booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges + totalLaundryCharges,
+        cgstAmount: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges + totalLaundryCharges) * (booking.cgstRate || 0.025) * 100) / 100,
+        sgstAmount: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges + totalLaundryCharges) * (booking.sgstRate || 0.025) * 100) / 100,
+        totalTax: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges + totalLaundryCharges) * ((booking.cgstRate || 0.025) + (booking.sgstRate || 0.025)) * 100) / 100,
+        grandTotal: Math.round(((booking.taxableAmount || 0) + totalServiceCharges + totalRestaurantCharges + totalLaundryCharges) * (1 + (booking.cgstRate || 0.025) + (booking.sgstRate || 0.025)) * 100) / 100
       }
     };
     

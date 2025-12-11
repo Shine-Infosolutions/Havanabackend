@@ -28,23 +28,25 @@ const connectAuditDB = async () => {
       family: 4
     });
 
-    // Wait for connection with timeout
-    await Promise.race([
-      new Promise((resolve, reject) => {
-        auditConnection.once('connected', () => {
-          console.log('✅ Audit database connected successfully');
-          resolve();
-        });
-        
-        auditConnection.once('error', (err) => {
-          console.error('❌ Audit database connection error:', err.message);
-          reject(err);
-        });
-      }),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Audit connection timeout')), 5000);
-      })
-    ]);
+    // Wait for connection with timeout (non-blocking)
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log('⚠️ Audit database connection timeout - continuing without audit');
+        resolve(null);
+      }, 3000);
+      
+      auditConnection.once('connected', () => {
+        clearTimeout(timeout);
+        console.log('✅ Audit database connected successfully');
+        resolve(auditConnection);
+      });
+      
+      auditConnection.once('error', (err) => {
+        clearTimeout(timeout);
+        console.error('❌ Audit database connection error:', err.message);
+        resolve(null);
+      });
+    });
 
     auditConnection.on('disconnected', () => {
       console.log('⚠️ Audit database disconnected');

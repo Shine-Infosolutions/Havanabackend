@@ -379,10 +379,31 @@ exports.getInvoice = async (req, res) => {
         return total + (order.totalAmount || 0);
       }, 0);
       
+      // Get laundry charges
+      let laundryCharges = 0;
+      try {
+        const Laundry = require('../models/Laundry');
+        const laundryOrders = await Laundry.find({
+          bookingId: booking._id,
+          laundryStatus: { $nin: ['cancelled', 'canceled'] }
+        });
+        
+        laundryCharges = laundryOrders.reduce((total, order) => {
+          const orderTotal = order.items?.filter(item => item.status !== 'lost' && item.status !== 'cancelled')
+            .reduce((sum, item) => sum + (item.calculatedAmount || 0), 0) || 0;
+          return total + orderTotal;
+        }, 0);
+        
+
+      } catch (error) {
+        console.error('Error fetching laundry charges:', error);
+      }
+      
       // Always update checkout with latest calculated charges
       checkout.restaurantCharges = restaurantCharges;
       checkout.roomServiceCharges = roomServiceCharges;
-      checkout.totalAmount = checkout.bookingCharges + restaurantCharges + roomServiceCharges;
+      checkout.laundryCharges = laundryCharges;
+      checkout.totalAmount = checkout.bookingCharges + restaurantCharges + roomServiceCharges + laundryCharges;
       
       // Save updated charges to database
       await checkout.save();
@@ -411,11 +432,12 @@ exports.getInvoice = async (req, res) => {
     const bookingCgstRate = booking?.cgstRate || 0;
     const bookingSgstRate = booking?.sgstRate || 0;
     
-    // Calculate total taxable amount including restaurant and room service charges
+    // Calculate total taxable amount including restaurant, room service and laundry charges
     const bookingTaxableAmount = booking?.taxableAmount || checkout.bookingCharges;
     const restaurantAmount = checkout.restaurantCharges || 0;
     const roomServiceAmount = checkout.roomServiceCharges || 0;
-    const totalTaxableAmount = bookingTaxableAmount + restaurantAmount + roomServiceAmount;
+    const laundryAmount = checkout.laundryCharges || 0;
+    const totalTaxableAmount = bookingTaxableAmount + restaurantAmount + roomServiceAmount + laundryAmount;
     
     const cgstAmount = booking?.cgstAmount || (totalTaxableAmount * bookingCgstRate);
     const sgstAmount = booking?.sgstAmount || (totalTaxableAmount * bookingSgstRate);
@@ -491,6 +513,22 @@ exports.getInvoice = async (req, res) => {
             cgstRate: roomServiceAmount * bookingCgstRate,
             sgstRate: roomServiceAmount * bookingSgstRate,
             amount: roomServiceAmount
+          });
+        }
+        
+        // Add laundry charges as line items
+        const laundryAmount = checkout.laundryCharges || 0;
+        if (laundryAmount > 0) {
+          items.push({
+            date: booking?.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('en-GB') : currentDate.toLocaleDateString('en-GB'),
+            particulars: `Laundry Services`,
+            pax: 1,
+            declaredRate: laundryAmount,
+            hsn: 996337,
+            rate: (bookingCgstRate + bookingSgstRate) * 100,
+            cgstRate: laundryAmount * bookingCgstRate,
+            sgstRate: laundryAmount * bookingSgstRate,
+            amount: laundryAmount
           });
         }
         
