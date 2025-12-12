@@ -8,7 +8,6 @@ const roomServiceSchema = new mongoose.Schema({
   },
   serviceType: {
     type: String,
-    enum: ['Restaurant', 'Laundry', 'Housekeeping', 'Maintenance', 'Other'],
     required: true
   },
   roomNumber: {
