@@ -14,6 +14,7 @@ router.get('/vendor/:vendorId', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STA
 
 // Status and Dashboard
 router.get('/dashboard', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), laundryController.getLaundryDashboard);
+router.get('/export/csv', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), laundryController.exportLaundryCSV);
 router.get('/items/overview', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), laundryController.getItemStatusOverview);
 router.get('/items/status/:status', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), laundryController.getItemsByStatus);
 router.get('/status/:status', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), laundryController.getLaundryByStatus);

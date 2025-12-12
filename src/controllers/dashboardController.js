@@ -1,5 +1,6 @@
 const Booking = require('../models/Booking');
 const RestaurantOrder = require('../models/RestaurantOrder');
+const Laundry = require('../models/Laundry');
 
 exports.getDashboardStats = async (req, res) => {
   try {
@@ -60,7 +61,8 @@ exports.getDashboardStats = async (req, res) => {
       cancelledBookings,
       cashPayments,
       upiPayments,
-      totalRevenue
+      totalRevenue,
+      laundryOrders
     ] = await Promise.all([
       Booking.countDocuments(baseQuery),
       Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
@@ -70,7 +72,8 @@ exports.getDashboardStats = async (req, res) => {
       Booking.aggregate([
         { $match: baseQuery },
         { $group: { _id: null, total: { $sum: '$rate' } } }
-      ])
+      ]),
+      Laundry.countDocuments(baseQuery)
     ]);
 
     res.json({
@@ -84,7 +87,8 @@ exports.getDashboardStats = async (req, res) => {
           upi: upiPayments,
           other: totalBookings - cashPayments - upiPayments
         },
-        totalRevenue: totalRevenue[0]?.total || 0
+        totalRevenue: totalRevenue[0]?.total || 0,
+        laundryOrders
       }
     });
   } catch (error) {
@@ -153,7 +157,8 @@ exports.downloadDashboardCSV = async (req, res) => {
       cashPayments,
       onlinePayments,
       totalRevenue,
-      restaurantOrders
+      restaurantOrders,
+      laundryOrders
     ] = await Promise.all([
       Booking.countDocuments(bookingQuery),
       Booking.countDocuments({ ...bookingQuery, status: 'Checked In' }),
@@ -164,7 +169,8 @@ exports.downloadDashboardCSV = async (req, res) => {
         { $match: bookingQuery },
         { $group: { _id: null, total: { $sum: '$rate' } } }
       ]),
-      RestaurantOrder.countDocuments(restaurantQuery)
+      RestaurantOrder.countDocuments(restaurantQuery),
+      Laundry.countDocuments(bookingQuery)
     ]);
 
     // Create CSV data with individual metrics
@@ -175,7 +181,8 @@ exports.downloadDashboardCSV = async (req, res) => {
       ['Total Revenue', totalRevenue[0]?.total || 0],
       ['Online Payments', onlinePayments],
       ['Cash Payments', cashPayments],
-      ['Restaurant Orders', restaurantOrders]
+      ['Restaurant Orders', restaurantOrders],
+      ['Laundry Orders', laundryOrders]
     ];
 
     // Convert to CSV string
@@ -320,6 +327,29 @@ exports.exportRestaurantOrders = async (req, res) => {
       formatDate(o.createdAt)
     ]));
     sendCSV(res, csvData, 'restaurant-orders');
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.exportLaundryOrders = async (req, res) => {
+  try {
+    const { filter, startDate, endDate } = req.query;
+    const dateFilter = getDateFilter(filter, startDate, endDate);
+    const orders = await Laundry.find(dateFilter).select('roomNumber grcNo requestedByName laundryStatus serviceType totalAmount items createdAt invoiceNumber');
+    const csvData = [['Invoice Number', 'Room Number', 'GRC No', 'Requested By', 'Status', 'Service Type', 'Total Amount', 'Items Count', 'Order Date']];
+    orders.forEach(o => csvData.push([
+      o.invoiceNumber || '',
+      o.roomNumber || '', 
+      o.grcNo || '', 
+      o.requestedByName || '', 
+      o.laundryStatus || '', 
+      o.serviceType || '',
+      o.totalAmount || 0,
+      o.items?.length || 0,
+      formatDate(o.createdAt)
+    ]));
+    sendCSV(res, csvData, 'laundry-orders');
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

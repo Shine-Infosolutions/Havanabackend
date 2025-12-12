@@ -17,5 +17,6 @@ router.get('/export/revenue', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT
 router.get('/export/online-payments', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.exportOnlinePayments);
 router.get('/export/cash-payments', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.exportCashPayments);
 router.get('/export/restaurant-orders', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.exportRestaurantOrders);
+router.get('/export/laundry-orders', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.exportLaundryOrders);
 
 module.exports = router;

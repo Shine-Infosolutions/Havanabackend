@@ -740,6 +740,92 @@ exports.updateVendorDetails = async (req, res) => {
   }
 };
 
+// Export Laundry Orders as CSV
+exports.exportLaundryCSV = async (req, res) => {
+  try {
+    const { filter, startDate, endDate, status, serviceType } = req.query;
+    
+    let dateFilter = {};
+    const now = new Date();
+    
+    switch (filter) {
+      case 'today':
+        dateFilter = {
+          createdAt: {
+            $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+          }
+        };
+        break;
+      case 'weekly':
+        const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+        dateFilter = { createdAt: { $gte: weekStart } };
+        break;
+      case 'monthly':
+        dateFilter = {
+          createdAt: {
+            $gte: new Date(now.getFullYear(), now.getMonth(), 1),
+            $lt: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+          }
+        };
+        break;
+      case 'yearly':
+        dateFilter = {
+          createdAt: {
+            $gte: new Date(now.getFullYear(), 0, 1),
+            $lt: new Date(now.getFullYear() + 1, 0, 1)
+          }
+        };
+        break;
+      case 'range':
+        if (startDate && endDate) {
+          dateFilter = {
+            createdAt: {
+              $gte: new Date(startDate),
+              $lte: new Date(endDate)
+            }
+          };
+        }
+        break;
+    }
+
+    let query = { ...dateFilter };
+    if (status && status !== 'all') query.laundryStatus = status;
+    if (serviceType && serviceType !== 'all') query.serviceType = serviceType;
+
+    const orders = await Laundry.find(query)
+      .select('roomNumber grcNo requestedByName laundryStatus serviceType totalAmount items createdAt invoiceNumber')
+      .sort({ createdAt: -1 });
+
+    const csvData = [['Invoice Number', 'Room Number', 'GRC No', 'Requested By', 'Status', 'Service Type', 'Total Amount', 'Items Count', 'Order Date']];
+    
+    orders.forEach(order => {
+      csvData.push([
+        order.invoiceNumber || '',
+        order.roomNumber || '',
+        order.grcNo || '',
+        order.requestedByName || '',
+        order.laundryStatus || '',
+        order.serviceType || '',
+        order.totalAmount || 0,
+        order.items?.length || 0,
+        formatDate(order.createdAt)
+      ]);
+    });
+
+    const csvString = csvData.map(row => 
+      row.map(cell => `"${cell || ''}"`).join(',')
+    ).join('\n');
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="laundry-orders-${timestamp}.csv"`);
+    res.send(csvString);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // Get Item Status Overview
 exports.getItemStatusOverview = async (req, res) => {
   try {
@@ -826,3 +912,9 @@ exports.getItemStatusOverview = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// Helper function for date formatting
+function formatDate(date) {
+  if (!date) return '';
+  return new Date(date).toISOString().split('T')[0];
+}
