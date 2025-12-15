@@ -223,33 +223,46 @@ exports.exportTotalBookings = async (req, res) => {
       'Guest Name', 'Phone', 'GRC No', 'Invoice Number', 'Room Numbers', 'Check In', 'Check Out', 'Rate', 'Restaurant Charges', 'Room Service Charges', 'Laundry Charges', 'Payment Status', 'Status', 'Booking Date'
     ]];
     
-    for (const b of bookings) {
-      // Get restaurant orders (table orders)
-      const restaurantOrders = await RestaurantOrder.find({
+    // Get all orders in bulk to optimize performance
+    const bookingIds = bookings.map(b => b._id);
+    const grcNos = bookings.map(b => b.grcNo).filter(Boolean);
+    const roomNumbers = bookings.map(b => b.roomNumber).filter(Boolean);
+    
+    const [allRestaurantOrders, allRoomServiceOrders, allLaundryOrders] = await Promise.all([
+      RestaurantOrder.find({
         $or: [
-          { grcNo: b.grcNo },
-          { roomNumber: b.roomNumber },
-          { bookingId: b._id }
+          { grcNo: { $in: grcNos } },
+          { roomNumber: { $in: roomNumbers } },
+          { bookingId: { $in: bookingIds } }
         ],
         tableNo: { $exists: true, $ne: null, $ne: '' }
-      }).lean();
-      
-      // Get room service orders
-      const roomServiceOrders = await RoomService.find({
+      }).lean(),
+      RoomService.find({
         $or: [
-          { roomNumber: b.roomNumber },
-          { bookingId: b._id }
+          { roomNumber: { $in: roomNumbers } },
+          { bookingId: { $in: bookingIds } }
         ]
-      }).lean();
-      
-      // Get laundry charges
-      const laundryOrders = await Laundry.find({
+      }).lean(),
+      Laundry.find({
         $or: [
-          { grcNo: b.grcNo },
-          { roomNumber: b.roomNumber },
-          { bookingId: b._id }
+          { grcNo: { $in: grcNos } },
+          { roomNumber: { $in: roomNumbers } },
+          { bookingId: { $in: bookingIds } }
         ]
-      }).lean();
+      }).lean()
+    ]);
+    
+    for (const b of bookings) {
+      // Filter orders for this specific booking
+      const restaurantOrders = allRestaurantOrders.filter(order => 
+        order.grcNo === b.grcNo || order.roomNumber === b.roomNumber || order.bookingId?.toString() === b._id.toString()
+      );
+      const roomServiceOrders = allRoomServiceOrders.filter(order => 
+        order.roomNumber === b.roomNumber || order.bookingId?.toString() === b._id.toString()
+      );
+      const laundryOrders = allLaundryOrders.filter(order => 
+        order.grcNo === b.grcNo || order.roomNumber === b.roomNumber || order.bookingId?.toString() === b._id.toString()
+      );
       
       const restaurantAmount = restaurantOrders.reduce((sum, order) => sum + (order.amount || 0), 0);
       const roomServiceAmount = roomServiceOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
@@ -292,33 +305,46 @@ exports.exportActiveBookings = async (req, res) => {
       'Guest Name', 'Phone', 'GRC No', 'Invoice Number', 'Room Numbers', 'Check In', 'Check Out', 'Rate', 'Restaurant Charges', 'Room Service Charges', 'Laundry Charges', 'Payment Status', 'Status', 'Booking Date'
     ]];
     
-    for (const b of bookings) {
-      // Get restaurant orders (table orders)
-      const restaurantOrders = await RestaurantOrder.find({
+    // Get all orders in bulk to optimize performance
+    const bookingIds = bookings.map(b => b._id);
+    const grcNos = bookings.map(b => b.grcNo).filter(Boolean);
+    const roomNumbers = bookings.map(b => b.roomNumber).filter(Boolean);
+    
+    const [allRestaurantOrders, allRoomServiceOrders, allLaundryOrders] = await Promise.all([
+      RestaurantOrder.find({
         $or: [
-          { grcNo: b.grcNo },
-          { roomNumber: b.roomNumber },
-          { bookingId: b._id }
+          { grcNo: { $in: grcNos } },
+          { roomNumber: { $in: roomNumbers } },
+          { bookingId: { $in: bookingIds } }
         ],
         tableNo: { $exists: true, $ne: null, $ne: '' }
-      }).lean();
-      
-      // Get room service orders
-      const roomServiceOrders = await RoomService.find({
+      }).lean(),
+      RoomService.find({
         $or: [
-          { roomNumber: b.roomNumber },
-          { bookingId: b._id }
+          { roomNumber: { $in: roomNumbers } },
+          { bookingId: { $in: bookingIds } }
         ]
-      }).lean();
-      
-      // Get laundry charges
-      const laundryOrders = await Laundry.find({
+      }).lean(),
+      Laundry.find({
         $or: [
-          { grcNo: b.grcNo },
-          { roomNumber: b.roomNumber },
-          { bookingId: b._id }
+          { grcNo: { $in: grcNos } },
+          { roomNumber: { $in: roomNumbers } },
+          { bookingId: { $in: bookingIds } }
         ]
-      }).lean();
+      }).lean()
+    ]);
+    
+    for (const b of bookings) {
+      // Filter orders for this specific booking
+      const restaurantOrders = allRestaurantOrders.filter(order => 
+        order.grcNo === b.grcNo || order.roomNumber === b.roomNumber || order.bookingId?.toString() === b._id.toString()
+      );
+      const roomServiceOrders = allRoomServiceOrders.filter(order => 
+        order.roomNumber === b.roomNumber || order.bookingId?.toString() === b._id.toString()
+      );
+      const laundryOrders = allLaundryOrders.filter(order => 
+        order.grcNo === b.grcNo || order.roomNumber === b.roomNumber || order.bookingId?.toString() === b._id.toString()
+      );
       
       const restaurantAmount = restaurantOrders.reduce((sum, order) => sum + (order.amount || 0), 0);
       const roomServiceAmount = roomServiceOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
