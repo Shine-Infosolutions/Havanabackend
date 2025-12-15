@@ -213,26 +213,44 @@ exports.exportTotalBookings = async (req, res) => {
   try {
     const { filter, startDate, endDate } = req.query;
     const dateFilter = getDateFilter(filter, startDate, endDate);
-    const bookings = await Booking.find({ deleted: { $ne: true }, ...dateFilter }).select('name mobileNo checkInDate checkOutDate rate status createdAt');
-    const csvData = [['Guest Name', 'Phone', 'Check In', 'Check Out', 'Rate', 'Status', 'Booking Date']];
+    const bookings = await Booking.find({ deleted: { $ne: true }, ...dateFilter })
+      .populate('categoryId')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    const csvData = [[
+      'Guest Name', 'Phone', 'Room Numbers', 'Check In', 'Check Out', 'Rate', 'Payment Status', 'Status', 'Booking Date'
+    ]];
+    
     let totalAmount = 0;
+    let totalAdvance = 0;
+    let totalBalance = 0;
+    
     bookings.forEach(b => {
+      const totalBookingAmount = (b.rate || 0);
+      totalAmount += totalBookingAmount;
+      totalAdvance += (b.totalAdvanceAmount || 0);
+      totalBalance += (b.balanceAmount || 0);
+      
       csvData.push([
-        b.name, 
-        b.mobileNo, 
-        formatDate(b.checkInDate), 
-        formatDate(b.checkOutDate), 
-        b.rate, 
-        b.status, 
+        b.name || '',
+        b.mobileNo || '',
+        b.roomNumber || '',
+        formatDate(b.checkInDate),
+        formatDate(b.checkOutDate),
+        b.rate || 0,
+        b.paymentStatus || '',
+        b.status || '',
         formatDate(b.createdAt)
       ]);
-      totalAmount += (b.rate || 0);
     });
-    // Add total rows
-    csvData.push(['', '', '', '', '', '', '']);
-    csvData.push(['TOTAL BOOKINGS:', bookings.length, '', '', '', '', '']);
-    csvData.push(['TOTAL AMOUNT:', '', '', '', `Rs.${totalAmount}`, '', '']);
-    sendCSV(res, csvData, 'total-bookings');
+    
+    // Add summary rows
+    csvData.push(['', '', '', '', '', '', '', '', '']);
+    csvData.push(['TOTAL BOOKINGS:', bookings.length, '', '', '', '', '', '', '']);
+    csvData.push(['TOTAL AMOUNT:', '', '', '', '', `Rs.${totalAmount}`, '', '', '']);
+    
+    sendCSV(res, csvData, 'total-bookings-detailed');
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -242,22 +260,25 @@ exports.exportActiveBookings = async (req, res) => {
   try {
     const { filter, startDate, endDate } = req.query;
     const dateFilter = getDateFilter(filter, startDate, endDate);
-    const bookings = await Booking.find({ deleted: { $ne: true }, status: 'Checked In', ...dateFilter }).select('name mobileNo checkInDate rate roomNumber');
-    const csvData = [['Guest Name', 'Phone', 'Check In Date', 'Rate', 'Room Number']];
+    const bookings = await Booking.find({ deleted: { $ne: true }, status: 'Checked In', ...dateFilter }).select('name mobileNo checkInDate checkOutDate rate roomNumber paymentStatus createdAt');
+    const csvData = [['Guest Name', 'Phone', 'Room Numbers', 'Check In', 'Check Out', 'Rate', 'Payment Status', 'Booking Date']];
     let totalAmount = 0;
     bookings.forEach(b => {
       csvData.push([
         b.name, 
         b.mobileNo, 
-        formatDate(b.checkInDate), 
+        b.roomNumber,
+        formatDate(b.checkInDate),
+        formatDate(b.checkOutDate), 
         b.rate, 
-        b.roomNumber
+        b.paymentStatus,
+        formatDate(b.createdAt)
       ]);
       totalAmount += (b.rate || 0);
     });
     // Add total row
-    csvData.push(['', '', '', '', '']);
-    csvData.push(['TOTAL ACTIVE BOOKINGS:', bookings.length, '', `Rs.${totalAmount}`, '']);
+    csvData.push(['', '', '', '', '', '', '', '']);
+    csvData.push(['TOTAL ACTIVE BOOKINGS:', bookings.length, '', '', '', `Rs.${totalAmount}`, '', '']);
     sendCSV(res, csvData, 'active-bookings');
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -473,7 +494,7 @@ function getDateFilter(filter, startDate, endDate) {
 
 function formatDate(date) {
   if (!date) return '';
-  return new Date(date).toISOString().split('T')[0];
+  return new Date(date).toLocaleDateString();
 }
 
 function sendCSV(res, csvData, filename) {
