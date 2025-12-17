@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
 const { auth, authorize } = require('../middleware/auth');
+const { dashboardLimiter } = require('../middleware/rateLimiter');
+const { cacheMiddleware } = require('../middleware/cache');
 
 // Dashboard stats (Admin, GM, Accounts)
-router.get('/stats', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.getDashboardStats);
+router.get('/stats', dashboardLimiter, cacheMiddleware(60), auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.getDashboardStats);
 
 // Download dashboard stats as CSV
 router.get('/download-csv', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'FRONT DESK']), dashboardController.downloadDashboardCSV);
