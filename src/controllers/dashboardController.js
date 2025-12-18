@@ -55,6 +55,12 @@ exports.getDashboardStats = async (req, res) => {
     // Base query
     const baseQuery = { deleted: { $ne: true }, ...dateFilter };
 
+    // Today's date filter for check-ins/check-outs
+    const todayFilter = {
+      $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+      $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    };
+
     // Parallel queries for better performance
     const [
       totalBookings,
@@ -63,7 +69,10 @@ exports.getDashboardStats = async (req, res) => {
       cashPayments,
       upiPayments,
       totalRevenue,
-      laundryOrders
+      laundryOrders,
+      restaurantOrders,
+      todayCheckIns,
+      todayCheckOuts
     ] = await Promise.all([
       Booking.countDocuments(baseQuery),
       Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
@@ -74,7 +83,10 @@ exports.getDashboardStats = async (req, res) => {
         { $match: baseQuery },
         { $group: { _id: null, total: { $sum: '$rate' } } }
       ]),
-      Laundry.countDocuments(baseQuery)
+      Laundry.countDocuments(baseQuery),
+      RestaurantOrder.countDocuments(dateFilter),
+      Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked In', checkInDate: todayFilter }),
+      Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter })
     ]);
 
     res.json({
@@ -89,7 +101,10 @@ exports.getDashboardStats = async (req, res) => {
           other: totalBookings - cashPayments - upiPayments
         },
         totalRevenue: totalRevenue[0]?.total || 0,
-        laundryOrders
+        laundryOrders,
+        restaurantOrders,
+        todayCheckIns,
+        todayCheckOuts
       }
     });
   } catch (error) {
