@@ -1,8 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const { createServer } = require("http");
-const { Server } = require("socket.io");
+
 require("dotenv").config();
 
 const authRoutes = require("./src/routes/authRoutes.js");
@@ -41,7 +40,6 @@ const { connectAuditDB } = require("./src/config/auditDatabase.js");
 const path = require("path");
 // Initialize express app
 const app = express();
-const server = createServer(app);
 // Middleware
 const allowedOrigins = [
   "http://localhost:5173",
@@ -54,23 +52,7 @@ const allowedOrigins = [
   "https://havana-f-chi.vercel.app"
 ];
 
-const io = new Server(server, {
-  cors: {
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, false);
-      }
-    },
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  transports: ['polling', 'websocket']
-});
 
-// Make io available globally
-app.set("io", io);
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -266,16 +248,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Server error", message: err.message });
 });
 
-// Banquet updates via Socket.io
-io.on('banquet-update', (data) => {
-  io.emit('banquet-notification', data);
-});
+
 
 const PORT = process.env.PORT || 5000;
 
 // Only start server in development
 if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
 // Export for serverless

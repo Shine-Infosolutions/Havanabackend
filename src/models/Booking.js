@@ -109,7 +109,7 @@ const bookingSchema = new mongoose.Schema({
   // Multiple Advance Payments
   advancePayments: [{
     amount: { type: Number, required: true },
-    paymentMode: { type: String, required: true },
+    paymentMode: { type: String },
     paymentDate: { type: Date, default: Date.now },
     reference: { type: String },
     notes: { type: String },
