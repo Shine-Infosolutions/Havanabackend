@@ -48,7 +48,7 @@ const allowedOrigins = [
   "http://localhost:4000",
   "https://havana-f-git-main-anshusharma42019s-projects.vercel.app",
   "https://havanabackend.vercel.app",
-  "https://havanabackend-gray.vercel.app",
+  "https://havanabackend-gray.vercel.app"
 ];
 
 app.use(
