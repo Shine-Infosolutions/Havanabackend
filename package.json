@@ -1,6 +1,6 @@
 {
   "name": "havanabackend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Havana Hotel Backend API",
   "main": "server.js",
   "scripts": {
