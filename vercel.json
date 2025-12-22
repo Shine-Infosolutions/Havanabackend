@@ -4,24 +4,10 @@
       "maxDuration": 10
     }
   },
-  "headers": [
+  "rewrites": [
     {
       "source": "/socket.io/(.*)",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex"
-        }
-      ]
-    }
-  ],
-  "routes": [
-    {
-      "src": "/socket.io/(.*)",
-      "status": 410,
-      "headers": {
-        "Cache-Control": "no-cache"
-      }
+      "destination": "/api/not-found"
     }
   ]
 }
