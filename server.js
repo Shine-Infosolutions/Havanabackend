@@ -197,7 +197,6 @@ app.get("/", (req, res) => {
 
 // Block socket.io requests completely
 app.use('/socket.io', (req, res) => {
-  console.log('Socket.IO request blocked:', req.method, req.url, 'User-Agent:', req.get('User-Agent'));
   res.status(410).json({ error: "Socket.IO permanently disabled" });
 });
 
