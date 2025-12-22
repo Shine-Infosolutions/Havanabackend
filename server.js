@@ -69,10 +69,11 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 
-// Block ALL socket.io requests immediately
+// Block ALL socket.io requests silently without logging
 app.use((req, res, next) => {
   if (req.url.includes('socket.io')) {
-    res.status(404).json({ error: 'Socket.IO not supported' });
+    res.writeHead(404);
+    res.end();
     return;
   }
   next();

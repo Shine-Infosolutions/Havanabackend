@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/socket.io/(.*)",
-      "destination": "/api/not-found"
+      "destination": "/404"
     }
   ]
 }
