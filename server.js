@@ -197,15 +197,16 @@ app.get("/", (req, res) => {
 
 // Block socket.io requests completely
 app.use('/socket.io', (req, res) => {
-  res.status(200).json({ message: "Socket.IO disabled" });
+  console.log('Socket.IO request blocked:', req.method, req.url, 'User-Agent:', req.get('User-Agent'));
+  res.status(410).json({ error: "Socket.IO permanently disabled" });
 });
 
 app.all("/socket.io*", (req, res) => {
-  res.status(200).json({ message: "Socket.IO disabled" });
+  res.status(410).json({ error: "Socket.IO permanently disabled" });
 });
 
 app.get("/socket.io/", (req, res) => {
-  res.status(200).json({ message: "Socket.IO disabled" });
+  res.status(410).json({ error: "Socket.IO permanently disabled" });
 });
 
 // Error handling middleware
