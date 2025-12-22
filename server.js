@@ -195,17 +195,17 @@ app.get("/", (req, res) => {
   res.send("API is running");
 });
 
-// Block socket.io requests completely
+// Block socket.io requests completely - must be before other routes
 app.use('/socket.io', (req, res) => {
-  res.status(410).json({ error: "Socket.IO permanently disabled" });
+  res.end();
 });
 
 app.all("/socket.io*", (req, res) => {
-  res.status(410).json({ error: "Socket.IO permanently disabled" });
+  res.end();
 });
 
 app.get("/socket.io/", (req, res) => {
-  res.status(410).json({ error: "Socket.IO permanently disabled" });
+  res.end();
 });
 
 // Error handling middleware
