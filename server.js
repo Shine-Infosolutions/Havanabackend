@@ -69,6 +69,19 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 
+// Block socket.io requests FIRST - before any other routes
+app.use('/socket.io', (req, res) => {
+  res.end();
+});
+
+app.all("/socket.io*", (req, res) => {
+  res.end();
+});
+
+app.get("/socket.io/", (req, res) => {
+  res.end();
+});
+
 // Serve uploaded files for fallback method
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -193,19 +206,6 @@ app.get("/test-db", async (req, res) => {
 
 app.get("/", (req, res) => {
   res.send("API is running");
-});
-
-// Block socket.io requests completely - must be before other routes
-app.use('/socket.io', (req, res) => {
-  res.end();
-});
-
-app.all("/socket.io*", (req, res) => {
-  res.end();
-});
-
-app.get("/socket.io/", (req, res) => {
-  res.end();
 });
 
 // Error handling middleware
