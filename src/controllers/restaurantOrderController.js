@@ -67,17 +67,17 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
     
-    // Broadcast order status update via Socket.IO
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('order-status-update', {
-        orderId: order._id,
-        status: order.status,
-        tableNo: order.tableNo,
-        customerName: order.customerName,
-        timestamp: new Date().toISOString()
-      });
-    }
+    // Socket.IO removed - no real-time updates
+    // const io = req.app.get('io');
+    // if (io) {
+    //   io.emit('order-status-update', {
+    //     orderId: order._id,
+    //     status: order.status,
+    //     tableNo: order.tableNo,
+    //     customerName: order.customerName,
+    //     timestamp: new Date().toISOString()
+    //   });
+    // }
     
     res.json(order);
   } catch (error) {

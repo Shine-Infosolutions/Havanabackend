@@ -18,7 +18,7 @@ const connectAuditDB = async () => {
     
     auditConnection = mongoose.createConnection(auditDbUri, {
       serverSelectionTimeoutMS: 3000,
-      socketTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
       connectTimeoutMS: 3000,
       maxPoolSize: 3,
       minPoolSize: 0,
