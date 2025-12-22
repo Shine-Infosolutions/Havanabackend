@@ -195,6 +195,11 @@ app.get("/", (req, res) => {
   res.send("API is running");
 });
 
+// Block socket.io requests
+app.all("/socket.io/*", (req, res) => {
+  res.status(404).json({ error: "WebSocket not supported" });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error("Server error:", err);
