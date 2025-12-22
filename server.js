@@ -196,8 +196,12 @@ app.get("/", (req, res) => {
 });
 
 // Block socket.io requests
-app.all("/socket.io/*", (req, res) => {
-  res.status(404).json({ error: "WebSocket not supported" });
+app.all("/socket.io*", (req, res) => {
+  res.status(200).json({ message: "Socket.IO disabled" });
+});
+
+app.get("/socket.io/", (req, res) => {
+  res.status(200).json({ message: "Socket.IO disabled" });
 });
 
 // Error handling middleware
