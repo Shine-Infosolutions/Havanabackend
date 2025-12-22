@@ -195,7 +195,11 @@ app.get("/", (req, res) => {
   res.send("API is running");
 });
 
-// Block socket.io requests
+// Block socket.io requests completely
+app.use('/socket.io', (req, res) => {
+  res.status(200).json({ message: "Socket.IO disabled" });
+});
+
 app.all("/socket.io*", (req, res) => {
   res.status(200).json({ message: "Socket.IO disabled" });
 });
