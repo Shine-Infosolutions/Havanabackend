@@ -46,9 +46,6 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:4000",
-  "https://havana-f-git-main-anshusharma42019s-projects.vercel.app",
-  "https://havanabackend.vercel.app",
-  "https://havanabackend-gray.vercel.app",
   "https://havana-f-tawny.vercel.app",
   "https://havanabackend-7wv1.vercel.app"
 ];
