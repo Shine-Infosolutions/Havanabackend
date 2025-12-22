@@ -38,8 +38,10 @@ const reportRoutes = require("./src/routes/reportRoutes.js");
 const housekeepingRoutes = require("./src/routes/housekeepingRoutes.js");
 const { connectAuditDB } = require("./src/config/auditDatabase.js");
 const path = require("path");
+
 // Initialize express app
 const app = express();
+
 // Middleware
 const allowedOrigins = [
   "http://localhost:5173",
@@ -51,7 +53,6 @@ const allowedOrigins = [
   "https://havanabackend-gray.vercel.app",
   "https://havana-f-chi.vercel.app"
 ];
-
 
 app.use(
   cors({
@@ -70,8 +71,6 @@ app.use(express.json({ limit: "50mb" }));
 
 // Serve uploaded files for fallback method
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// Add JWT_SECRET to your .env file
 
 // Database connection
 let isConnected = false;
@@ -192,7 +191,6 @@ app.use("/api/sub-reports", subReportsRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/housekeeping", housekeepingRoutes);
 
-
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
@@ -246,19 +244,6 @@ app.use((err, req, res, next) => {
   console.error("Server error:", err);
   res.status(500).json({ error: "Server error", message: err.message });
 });
-
-const PORT = process.env.PORT || 5000;
-
-// Only start server in development
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-}
-
-// Export for serverless
-module.exports = app;or", message: err.message });
-});
-
-
 
 const PORT = process.env.PORT || 5000;
 
