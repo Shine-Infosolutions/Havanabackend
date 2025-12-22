@@ -50,6 +50,7 @@ const allowedOrigins = [
   "https://havanabackend.vercel.app",
   "https://havanabackend-gray.vercel.app",
   "https://havana-f-tawny.vercel.app",
+  "https://havanabackend-7wv1.vercel.app"
 ];
 
 app.use(
