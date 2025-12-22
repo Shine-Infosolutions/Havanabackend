@@ -90,7 +90,6 @@ const connectToMongoDB = async () => {
     
     const connectionOptions = {
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 10000,
       connectTimeoutMS: 5000,
       maxPoolSize: 10,
       minPoolSize: 1,
@@ -246,6 +245,17 @@ app.get("/", (req, res) => {
 app.use((err, req, res, next) => {
   console.error("Server error:", err);
   res.status(500).json({ error: "Server error", message: err.message });
+});
+
+const PORT = process.env.PORT || 5000;
+
+// Only start server in development
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+// Export for serverless
+module.exports = app;or", message: err.message });
 });
 
 
