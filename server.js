@@ -45,9 +45,7 @@ const app = express();
 // Middleware
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:4000",
-  "https://havana-f-tawny.vercel.app",
-  "https://havanabackend-7wv1.vercel.app"
+  "http://localhost:4000"
 ];
 
 app.use(
@@ -209,10 +207,4 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Only start server in development
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-}
-
-// Export for serverless
-module.exports = app;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
