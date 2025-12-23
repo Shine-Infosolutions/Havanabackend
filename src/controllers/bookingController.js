@@ -157,9 +157,6 @@ exports.bookRoom = async (req, res) => {
 
       const grcNo = await generateGRC();
       const bookedRoomNumbers = roomsToBook.map(room => room.room_number);
-      
-      console.log('🔍 Debug - Rooms to book:', roomsToBook.map(r => ({ id: r._id, room_number: r.room_number })));
-      console.log('🔍 Debug - Booked room numbers:', bookedRoomNumbers);
 
       // Calculate tax amounts using dynamic rates
       let taxableAmount = extraDetails.rate || 0; // Input rate is the taxable amount
@@ -295,17 +292,6 @@ exports.bookRoom = async (req, res) => {
         extraBed: extraDetails.extraBed || roomRates.some(room => room.extraBed === true),
         extraBedCharge: extraDetails.extraBedCharge || 0,
         extraBedRooms: extraDetails.extraBedRooms || roomRates.filter(room => room.extraBed === true).map(room => room.roomNumber),
-        
-        // Debug log to verify room number assignment
-        ...((() => {
-          console.log('🔍 Final booking room assignment:', {
-            bookedRoomNumbers,
-            joinedRoomNumbers: bookedRoomNumbers.join(','),
-            roomGuestDetails,
-            roomRates
-          });
-          return {};
-        })()),
         rate: totalRate, // Total amount including taxes
         taxableAmount: taxableAmount,
         cgstAmount: cgstAmount,
@@ -350,6 +336,15 @@ exports.bookRoom = async (req, res) => {
       });
 
       await booking.save();
+
+      // Fix room number based on roomRates (source of truth)
+      if (roomRates && roomRates.length > 0) {
+        const correctRoomNumbers = roomRates.map(rate => rate.roomNumber).filter(Boolean);
+        if (correctRoomNumbers.length > 0) {
+          booking.roomNumber = correctRoomNumbers.join(',');
+          await booking.save();
+        }
+      }
 
       // Create audit log for booking creation
       await createAuditLog('CREATE', booking._id, req.user?.id, req.user?.role, null, booking.toObject(), req);
