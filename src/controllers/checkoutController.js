@@ -157,64 +157,113 @@ exports.getCheckout = async (req, res) => {
   }
 };
 
-// Get checkout by booking ID (alternative endpoint)
-exports.getCheckoutByBooking = async (req, res) => {
+// Get comprehensive checkout data with all charges in one API call
+exports.getComprehensiveCheckout = async (req, res) => {
   try {
     const { bookingId } = req.params;
     
-    // Validate ObjectId
-    if (!bookingId || bookingId === 'undefined' || !mongoose.Types.ObjectId.isValid(bookingId)) {
+    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ message: 'Invalid booking ID' });
     }
     
-    const checkout = await Checkout.findOne({ bookingId })
-      .populate('bookingId', 'grcNo name roomNumber checkInDate checkOutDate');
+    // Get booking details
+    const booking = await Booking.findById(bookingId).populate('categoryId');
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Get or create checkout
+    let checkout = await Checkout.findOne({ bookingId });
     
+    // Get all charges in parallel
+    const [restaurantOrders, roomServiceOrders, laundryOrders] = await Promise.all([
+      require('../models/RestaurantOrder').find({
+        bookingId: bookingId,
+        paymentStatus: { $ne: 'paid' },
+        status: { $nin: ['cancelled', 'canceled'] },
+        nonChargeable: { $ne: true }
+      }),
+      require('../models/RoomService').find({
+        bookingId: bookingId,
+        paymentStatus: { $ne: 'paid' },
+        status: { $nin: ['cancelled', 'canceled'] },
+        nonChargeable: { $ne: true }
+      }),
+      require('../models/Laundry').find({
+        bookingId: bookingId,
+        laundryStatus: { $nin: ['cancelled', 'canceled'] }
+      })
+    ]);
+
+    // Calculate charges
+    const restaurantCharges = restaurantOrders.reduce((sum, order) => sum + (order.amount || 0), 0);
+    const roomServiceCharges = roomServiceOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+    const laundryCharges = laundryOrders.reduce((sum, order) => {
+      const chargeableAmount = order.items?.filter(item => !item.nonChargeable && item.status !== 'lost')
+        .reduce((itemSum, item) => itemSum + (item.calculatedAmount || 0), 0) || 0;
+      return sum + chargeableAmount;
+    }, 0);
+    
+    const bookingCharges = booking.rate || 0;
+    const totalAmount = bookingCharges + restaurantCharges + roomServiceCharges + laundryCharges;
+
     if (!checkout) {
-      return res.status(404).json({ message: 'Checkout not found' });
+      checkout = await Checkout.create({
+        bookingId,
+        restaurantCharges,
+        roomServiceCharges,
+        laundryCharges,
+        bookingCharges,
+        totalAmount,
+        pendingAmount: totalAmount
+      });
+    } else {
+      // Update existing checkout
+      checkout.restaurantCharges = restaurantCharges;
+      checkout.roomServiceCharges = roomServiceCharges;
+      checkout.laundryCharges = laundryCharges;
+      checkout.totalAmount = totalAmount;
+      checkout.pendingAmount = totalAmount;
+      await checkout.save();
     }
 
-    // Recalculate charges to ensure current data
-    const booking = checkout.bookingId;
-    const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(r => r.trim()) : [];
-    
-    try {
-      const RestaurantOrder = require('../models/RestaurantOrder');
-      const RoomService = require('../models/RoomService');
-      
-      const restaurantOrders = await RestaurantOrder.find({
-        $or: [
-          { tableNo: { $in: roomNumbers } },
-          { bookingId: bookingId }
-        ],
-        paymentStatus: { $ne: 'paid' },
-        status: { $nin: ['cancelled', 'canceled'] },
-        nonChargeable: { $ne: true }
-      });
-      
-      const roomServiceOrders = await RoomService.find({
-        roomNumber: { $in: roomNumbers },
-        paymentStatus: { $ne: 'paid' },
-        status: { $nin: ['cancelled', 'canceled'] },
-        nonChargeable: { $ne: true }
-      });
-      
-      const restaurantCharges = restaurantOrders.reduce((total, order) => total + (order.amount || 0), 0);
-      const roomServiceCharges = roomServiceOrders.reduce((total, order) => total + (order.totalAmount || 0), 0);
-      
-      // Update checkout if charges have changed
-      if (restaurantCharges !== checkout.restaurantCharges || roomServiceCharges !== checkout.roomServiceCharges) {
-        checkout.restaurantCharges = restaurantCharges;
-        checkout.roomServiceCharges = roomServiceCharges;
-        checkout.totalAmount = checkout.bookingCharges + restaurantCharges + roomServiceCharges;
-        checkout.pendingAmount = checkout.totalAmount;
-        await checkout.save();
+    // Return comprehensive data
+    res.json({
+      success: true,
+      checkout,
+      booking: {
+        _id: booking._id,
+        grcNo: booking.grcNo,
+        name: booking.name,
+        roomNumber: booking.roomNumber,
+        checkInDate: booking.checkInDate,
+        checkOutDate: booking.checkOutDate,
+        timeOut: booking.timeOut,
+        advancePayments: booking.advancePayments || [],
+        discountPercent: booking.discountPercent,
+        discountNotes: booking.discountNotes,
+        taxableAmount: booking.taxableAmount,
+        cgstAmount: booking.cgstAmount,
+        sgstAmount: booking.sgstAmount,
+        cgstRate: booking.cgstRate,
+        sgstRate: booking.sgstRate
+      },
+      charges: {
+        roomCharges: {
+          taxableAmount: booking.taxableAmount || 0,
+          cgstAmount: booking.cgstAmount || 0,
+          sgstAmount: booking.sgstAmount || 0,
+          totalRoomCharges: bookingCharges
+        },
+        summary: {
+          totalServiceCharges: roomServiceCharges,
+          totalRestaurantCharges: restaurantCharges,
+          totalLaundryCharges: laundryCharges,
+          subtotal: (booking.taxableAmount || 0) + restaurantCharges + roomServiceCharges + laundryCharges,
+          grandTotal: totalAmount
+        }
       }
-    } catch (error) {
-      console.error('Error recalculating charges:', error);
-    }
-
-    res.status(200).json({ success: true, checkout });
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

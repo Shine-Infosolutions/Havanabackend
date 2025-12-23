@@ -9,6 +9,9 @@ router.post('/add', auth, authorize(['ADMIN', 'GM','FRONT DESK']), categoryContr
 // Get all room categories (All roles)
 router.get('/all', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), categoryController.getCategories);
 
+// Get categories with rooms in one call (All roles)
+router.get('/with-rooms', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), categoryController.getCategoriesWithRooms);
+
 // Get a room category by ID (All roles)
 router.get('/get/:id', auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), categoryController.getCategoryById);
 

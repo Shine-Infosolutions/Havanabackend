@@ -29,6 +29,38 @@ exports.getCategories = async (req, res) => {
   }
 };
 
+// Get all categories with room counts
+exports.getCategoriesWithRooms = async (req, res) => {
+  try {
+    const Room = require('../models/Room');
+    
+    const [categories, rooms] = await Promise.all([
+      Category.find().maxTimeMS(5000).lean().exec(),
+      Room.find().maxTimeMS(5000).lean().exec()
+    ]);
+    
+    // Add room counts to categories
+    const categoriesWithCounts = categories.map(category => ({
+      ...category,
+      totalRooms: rooms.filter(room => {
+        return room.categoryId === category._id || room.category?._id === category._id;
+      }).length,
+      availableRoomsCount: 0, // Will be updated after availability check
+    }));
+    
+    res.json({
+      categories: categoriesWithCounts,
+      rooms: rooms
+    });
+  } catch (error) {
+    if (error.name === 'MongooseError' && error.message.includes('buffering timed out')) {
+      res.status(408).json({ error: 'Database query timeout. Please try again.' });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+};
+
 // Get a category by ID
 exports.getCategoryById = async (req, res) => {
   try {
