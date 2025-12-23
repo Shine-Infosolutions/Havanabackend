@@ -41,6 +41,9 @@ router.get("/:bookingId", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', '
 // Fix room availability (Admin only)
 router.post("/fix-rooms", auth, authorize(['ADMIN']), bookingController.fixRoomAvailability);
 
+// Fix booking room numbers (Admin only)
+router.post("/fix-room-numbers", auth, authorize(['ADMIN']), bookingController.fixBookingRoomNumbers);
+
 // Delete booking (Admin only)
 router.delete("/unbook/:bookingId", auth, authorize(['ADMIN']), bookingController.deleteBooking);
 

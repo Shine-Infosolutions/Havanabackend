@@ -10,6 +10,11 @@ exports.createCheckout = async (req, res) => {
   try {
     const { bookingId } = req.body;
 
+    // Validate ObjectId
+    if (!bookingId || bookingId === 'undefined' || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({ message: 'Invalid booking ID' });
+    }
+
     // Get booking details
     const booking = await Booking.findById(bookingId);
     if (!booking) {
@@ -94,6 +99,11 @@ exports.getCheckout = async (req, res) => {
   try {
     const { bookingId } = req.params;
     
+    // Validate ObjectId
+    if (!bookingId || bookingId === 'undefined' || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({ message: 'Invalid booking ID' });
+    }
+    
     const checkout = await Checkout.findOne({ bookingId })
       .populate('bookingId', 'grcNo name roomNumber checkInDate checkOutDate');
     
@@ -151,6 +161,11 @@ exports.getCheckout = async (req, res) => {
 exports.getCheckoutByBooking = async (req, res) => {
   try {
     const { bookingId } = req.params;
+    
+    // Validate ObjectId
+    if (!bookingId || bookingId === 'undefined' || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({ message: 'Invalid booking ID' });
+    }
     
     const checkout = await Checkout.findOne({ bookingId })
       .populate('bookingId', 'grcNo name roomNumber checkInDate checkOutDate');
@@ -210,6 +225,11 @@ exports.updatePaymentStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, paidAmount, lateCheckoutFee } = req.body;
+
+    // Validate ObjectId
+    if (!id || id === 'undefined' || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid checkout ID' });
+    }
 
     const checkout = await Checkout.findById(id).populate('bookingId');
     if (!checkout) {
@@ -302,6 +322,11 @@ exports.generateInvoice = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Validate ObjectId
+    if (!id || id === 'undefined' || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid checkout ID' });
+    }
+    
     const checkout = await Checkout.findById(id)
       .populate({
         path: 'bookingId',
@@ -334,6 +359,10 @@ exports.getInvoice = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Validate ObjectId
+    if (!id || id === 'undefined' || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid checkout ID' });
+    }
 
     const checkout = await Checkout.findById(id)
       .populate({

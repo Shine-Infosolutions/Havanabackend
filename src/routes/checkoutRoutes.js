@@ -9,6 +9,9 @@ router.post('/create', auth, authorize(['ADMIN', 'FRONT DESK', 'ACCOUNTS']), che
 // Get checkout by booking ID (Front Desk, Accounts, Admin)
 router.get('/booking/:bookingId', auth, authorize(['FRONT DESK', 'ACCOUNTS', 'ADMIN']), checkoutController.getCheckout);
 
+// Alternative endpoint for checkout by booking ID
+router.get('/checkout/booking/:bookingId', auth, authorize(['FRONT DESK', 'ACCOUNTS', 'ADMIN']), checkoutController.getCheckoutByBooking);
+
 
 
 // Update payment status (Accounts, Admin)

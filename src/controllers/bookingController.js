@@ -157,6 +157,9 @@ exports.bookRoom = async (req, res) => {
 
       const grcNo = await generateGRC();
       const bookedRoomNumbers = roomsToBook.map(room => room.room_number);
+      
+      console.log('🔍 Debug - Rooms to book:', roomsToBook.map(r => ({ id: r._id, room_number: r.room_number })));
+      console.log('🔍 Debug - Booked room numbers:', bookedRoomNumbers);
 
       // Calculate tax amounts using dynamic rates
       let taxableAmount = extraDetails.rate || 0; // Input rate is the taxable amount
@@ -292,6 +295,17 @@ exports.bookRoom = async (req, res) => {
         extraBed: extraDetails.extraBed || roomRates.some(room => room.extraBed === true),
         extraBedCharge: extraDetails.extraBedCharge || 0,
         extraBedRooms: extraDetails.extraBedRooms || roomRates.filter(room => room.extraBed === true).map(room => room.roomNumber),
+        
+        // Debug log to verify room number assignment
+        ...((() => {
+          console.log('🔍 Final booking room assignment:', {
+            bookedRoomNumbers,
+            joinedRoomNumbers: bookedRoomNumbers.join(','),
+            roomGuestDetails,
+            roomRates
+          });
+          return {};
+        })()),
         rate: totalRate, // Total amount including taxes
         taxableAmount: taxableAmount,
         cgstAmount: cgstAmount,
@@ -1512,6 +1526,44 @@ exports.fixRoomAvailability = async (req, res) => {
     res.json({
       success: true,
       message: `Fixed ${fixedCount} rooms that were incorrectly marked as booked`,
+      fixedCount
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Fix booking room numbers based on roomRates data
+exports.fixBookingRoomNumbers = async (req, res) => {
+  try {
+    const bookings = await Booking.find({ 
+      deleted: { $ne: true },
+      roomRates: { $exists: true, $ne: [] }
+    });
+    
+    let fixedCount = 0;
+    
+    for (const booking of bookings) {
+      // Get room numbers from roomRates array (most reliable source)
+      const roomNumbersFromRates = booking.roomRates.map(rate => rate.roomNumber).filter(Boolean);
+      
+      if (roomNumbersFromRates.length > 0) {
+        const correctRoomNumber = roomNumbersFromRates.join(',');
+        
+        // Only update if different
+        if (booking.roomNumber !== correctRoomNumber) {
+          console.log(`Fixing booking ${booking.grcNo}: ${booking.roomNumber} -> ${correctRoomNumber}`);
+          
+          booking.roomNumber = correctRoomNumber;
+          await booking.save();
+          fixedCount++;
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Fixed ${fixedCount} booking room numbers`,
       fixedCount
     });
   } catch (error) {
