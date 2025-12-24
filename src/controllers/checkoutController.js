@@ -205,7 +205,10 @@ exports.getComprehensiveCheckout = async (req, res) => {
     }, 0);
     
     const bookingCharges = booking.rate || 0;
-    const totalAmount = bookingCharges + restaurantCharges + roomServiceCharges + laundryCharges;
+    const subtotal = (booking.taxableAmount || 0) + restaurantCharges + roomServiceCharges + laundryCharges;
+    const cgstAmount = subtotal * (booking.cgstRate !== undefined ? booking.cgstRate : 0.025);
+    const sgstAmount = subtotal * (booking.sgstRate !== undefined ? booking.sgstRate : 0.025);
+    const totalAmount = subtotal + cgstAmount + sgstAmount;
 
     if (!checkout) {
       checkout = await Checkout.create({
@@ -259,7 +262,11 @@ exports.getComprehensiveCheckout = async (req, res) => {
           totalServiceCharges: roomServiceCharges,
           totalRestaurantCharges: restaurantCharges,
           totalLaundryCharges: laundryCharges,
-          subtotal: (booking.taxableAmount || 0) + restaurantCharges + roomServiceCharges + laundryCharges,
+          subtotal: subtotal,
+          cgstRate: booking.cgstRate !== undefined ? booking.cgstRate : 0.025,
+          sgstRate: booking.sgstRate !== undefined ? booking.sgstRate : 0.025,
+          cgstAmount: cgstAmount,
+          sgstAmount: sgstAmount,
           grandTotal: totalAmount
         }
       }
