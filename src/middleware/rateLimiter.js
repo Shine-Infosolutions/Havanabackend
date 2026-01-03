@@ -9,6 +9,10 @@ const apiLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development
+    return process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1';
+  }
 });
 
 // Strict rate limiter for expensive operations
@@ -17,6 +21,9 @@ const strictLimiter = rateLimit({
   max: 10, // Limit each IP to 10 requests per minute
   message: {
     error: 'Too many requests, please slow down.'
+  },
+  skip: (req) => {
+    return process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1';
   }
 });
 
@@ -26,6 +33,9 @@ const dashboardLimiter = rateLimit({
   max: 20, // 20 requests per 30 seconds
   message: {
     error: 'Dashboard requests limited, please wait.'
+  },
+  skip: (req) => {
+    return process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1';
   }
 });
 
