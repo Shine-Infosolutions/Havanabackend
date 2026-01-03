@@ -45,7 +45,8 @@ const app = express();
 // Middleware
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:4000"
+  "http://localhost:4000",
+  "https://havana-f-swart.vercel.app"
 ];
 
 app.use(
