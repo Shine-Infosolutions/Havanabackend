@@ -301,6 +301,25 @@ exports.updatePaymentStatus = async (req, res) => {
     if ((status === 'Completed' || status === 'paid') && checkout.bookingId) {
       const booking = checkout.bookingId;
       
+      // Add the final payment to advance payments array
+      if (paidAmount && paidAmount > 0) {
+        const finalPayment = {
+          amount: paidAmount,
+          paymentMode: 'Cash', // Default to cash, could be made dynamic
+          paymentDate: new Date(),
+          reference: 'Final checkout payment',
+          notes: 'Payment processed during checkout'
+        };
+        
+        if (!booking.advancePayments) {
+          booking.advancePayments = [];
+        }
+        booking.advancePayments.push(finalPayment);
+        
+        // Update total advance amount
+        booking.totalAdvanceAmount = booking.advancePayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+      }
+      
       // Update booking status to 'Checked Out' and set actual checkout time
       booking.status = 'Checked Out';
       booking.paymentStatus = 'Paid';
