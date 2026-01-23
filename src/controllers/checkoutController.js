@@ -377,6 +377,9 @@ exports.updatePaymentStatus = async (req, res) => {
             if (room) {
               room.status = 'available';
               await room.save();
+              console.log(`Room ${roomNum} status updated to available`);
+            } else {
+              console.log(`Room ${roomNum} not found`);
             }
           } catch (roomError) {
             console.error('Error updating room:', roomError);
