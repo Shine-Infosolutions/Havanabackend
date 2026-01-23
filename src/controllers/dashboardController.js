@@ -13,10 +13,14 @@ exports.getDashboardStats = async (req, res) => {
     
     switch (filter) {
       case 'today':
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
         dateFilter = {
           createdAt: {
-            $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-            $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+            $gte: todayStart,
+            $lte: todayEnd
           }
         };
         break;
@@ -56,9 +60,13 @@ exports.getDashboardStats = async (req, res) => {
     const baseQuery = { deleted: { $ne: true }, ...dateFilter };
 
     // Today's date filter for check-ins/check-outs
+    const todayFilterForCheckInOut = new Date();
+    todayFilterForCheckInOut.setHours(0, 0, 0, 0);
+    const todayEndForCheckInOut = new Date();
+    todayEndForCheckInOut.setHours(23, 59, 59, 999);
     const todayFilter = {
-      $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-      $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      $gte: todayFilterForCheckInOut,
+      $lte: todayEndForCheckInOut
     };
 
     // Parallel queries for better performance
@@ -66,9 +74,13 @@ exports.getDashboardStats = async (req, res) => {
       totalBookings,
       activeBookings,
       cancelledBookings,
-      cashPayments,
-      upiPayments,
+      cashPaymentsMain,
+      upiPaymentsMain,
+      cashPaymentsAdvance,
+      upiPaymentsAdvance,
       totalRevenue,
+      cashRevenue,
+      onlineRevenue,
       laundryOrders,
       restaurantOrders,
       todayCheckIns,
@@ -77,10 +89,20 @@ exports.getDashboardStats = async (req, res) => {
       Booking.countDocuments(baseQuery),
       Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
       Booking.countDocuments({ ...baseQuery, status: 'Cancelled' }),
-      Booking.countDocuments({ ...baseQuery, paymentMode: /cash/i }),
-      Booking.countDocuments({ ...baseQuery, paymentMode: /upi/i }),
+      Booking.countDocuments({ ...baseQuery, paymentMode: 'Cash' }),
+      Booking.countDocuments({ ...baseQuery, paymentMode: 'UPI' }),
+      Booking.countDocuments({ ...baseQuery, 'advancePayments.paymentMode': { $regex: /cash/i } }),
+      Booking.countDocuments({ ...baseQuery, 'advancePayments.paymentMode': { $regex: /upi|online|card/i } }),
       Booking.aggregate([
         { $match: baseQuery },
+        { $group: { _id: null, total: { $sum: '$rate' } } }
+      ]),
+      Booking.aggregate([
+        { $match: { ...baseQuery, paymentMode: 'Cash' } },
+        { $group: { _id: null, total: { $sum: '$rate' } } }
+      ]),
+      Booking.aggregate([
+        { $match: { ...baseQuery, paymentMode: 'UPI' } },
         { $group: { _id: null, total: { $sum: '$rate' } } }
       ]),
       Laundry.countDocuments(baseQuery),
@@ -88,6 +110,9 @@ exports.getDashboardStats = async (req, res) => {
       Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked In', checkInDate: todayFilter }),
       Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter })
     ]);
+
+    const cashPayments = cashPaymentsMain + cashPaymentsAdvance;
+    const upiPayments = upiPaymentsMain + upiPaymentsAdvance;
 
     res.json({
       success: true,
@@ -101,6 +126,8 @@ exports.getDashboardStats = async (req, res) => {
           other: totalBookings - cashPayments - upiPayments
         },
         totalRevenue: totalRevenue[0]?.total || 0,
+        cashRevenue: cashRevenue[0]?.total || 0,
+        onlineRevenue: onlineRevenue[0]?.total || 0,
         laundryOrders,
         restaurantOrders,
         todayCheckIns,
@@ -786,10 +813,14 @@ function getDateFilter(filter, startDate, endDate) {
   
   switch (filter) {
     case 'today':
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
       dateFilter = {
         createdAt: {
-          $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-          $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+          $gte: todayStart,
+          $lte: todayEnd
         }
       };
       break;
