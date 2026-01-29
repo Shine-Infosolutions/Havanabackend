@@ -1,10 +1,33 @@
 const RoomService = require("../models/RoomService");
+const { getAuditLogModel } = require('../models/AuditLogModel');
 let RestaurantOrder;
 try {
   RestaurantOrder = require("../models/RestaurantOrder");
 } catch (error) {
   console.warn('RestaurantOrder model not found, room service will work with RoomService model only');
 }
+
+// Helper function to create audit log
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'ROOM_SERVICE',
+        recordId,
+        userId: userId || 'SYSTEM',
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // Create room service order (integrates with restaurant orders)
 exports.createOrder = async (req, res) => {
@@ -56,6 +79,10 @@ exports.createOrder = async (req, res) => {
     const order = new RoomService(orderData);
 
     await order.save();
+
+    // Create audit log
+    await createAuditLog('CREATE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
+
     res.status(201).json({ success: true, message: 'Room service order created successfully', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -165,6 +192,8 @@ exports.updateOrder = async (req, res) => {
       return res.status(400).json({ message: "Cannot edit delivered or cancelled orders" });
     }
 
+    const originalData = order.toObject();
+
     // If items are being updated, recalculate totals
     if (req.body.items) {
       let subtotal = 0;
@@ -185,6 +214,9 @@ exports.updateOrder = async (req, res) => {
       req.body,
       { new: true, runValidators: false }
     );
+    
+    // Create audit log
+    await createAuditLog('UPDATE', updatedOrder._id, req.user?.id, req.user?.role, originalData, updatedOrder.toObject(), req);
     
     res.json({ success: true, order: updatedOrder });
   } catch (error) {
@@ -500,6 +532,9 @@ exports.deleteOrder = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    // Create audit log
+    await createAuditLog('DELETE', order._id, req.user?.id, req.user?.role, order.toObject(), null, req);
 
     if (isRestaurantOrder) {
       await RestaurantOrder.findByIdAndDelete(req.params.id);

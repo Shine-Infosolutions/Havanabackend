@@ -1,4 +1,27 @@
 const Housekeeping = require('../models/Housekeeping');
+const { getAuditLogModel } = require('../models/AuditLogModel');
+
+// Helper function to create audit log
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'HOUSEKEEPING',
+        recordId,
+        userId: userId || 'SYSTEM',
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // Get all housekeeping tasks
 exports.getAllTasks = async (req, res) => {
@@ -23,6 +46,10 @@ exports.createTask = async (req, res) => {
   try {
     const task = new Housekeeping(req.body);
     await task.save();
+
+    // Create audit log
+    await createAuditLog('CREATE', task._id, req.user?.id, req.user?.role, null, task.toObject(), req);
+
     res.status(201).json({ success: true, task });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -35,6 +62,12 @@ exports.updateTaskStatus = async (req, res) => {
     const { id } = req.params;
     const { status, notes, actualTime } = req.body;
     
+    // Get original data for audit log
+    const originalTask = await Housekeeping.findById(id);
+    if (!originalTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const updateData = { status, notes };
     
     if (status === 'in_progress') {
@@ -45,6 +78,10 @@ exports.updateTaskStatus = async (req, res) => {
     }
 
     const task = await Housekeeping.findByIdAndUpdate(id, updateData, { new: true });
+    
+    // Create audit log
+    await createAuditLog('UPDATE', task._id, req.user?.id, req.user?.role, originalTask.toObject(), task.toObject(), req);
+    
     res.json({ success: true, task });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -55,7 +92,18 @@ exports.updateTaskStatus = async (req, res) => {
 exports.updateTask = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Get original data for audit log
+    const originalTask = await Housekeeping.findById(id);
+    if (!originalTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const task = await Housekeeping.findByIdAndUpdate(id, req.body, { new: true });
+    
+    // Create audit log
+    await createAuditLog('UPDATE', task._id, req.user?.id, req.user?.role, originalTask.toObject(), task.toObject(), req);
+    
     res.json({ success: true, task });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -66,6 +114,16 @@ exports.updateTask = async (req, res) => {
 exports.deleteTask = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Get original data for audit log
+    const task = await Housekeeping.findById(id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Create audit log
+    await createAuditLog('DELETE', task._id, req.user?.id, req.user?.role, task.toObject(), null, req);
+    
     await Housekeeping.findByIdAndDelete(id);
     res.json({ success: true, message: 'Task deleted successfully' });
   } catch (error) {

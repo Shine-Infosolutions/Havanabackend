@@ -1,5 +1,28 @@
 const Booking = require('../models/Booking');
 const Room = require('../models/Room');
+const { getAuditLogModel } = require('../models/AuditLogModel');
+
+// Helper function to create audit log
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'NIGHT_AUDIT',
+        recordId,
+        userId: userId || 'SYSTEM',
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // Import RestaurantOrder conditionally
 let RestaurantOrder;
@@ -142,6 +165,9 @@ const generateNightAuditReport = async (req, res) => {
         createdAt: o.createdAt
       }))
     };
+
+    // Create audit log for report generation
+    await createAuditLog('CREATE', `REPORT_${date}`, req.user?.id, req.user?.role, null, { reportDate: date, summary: reportData }, req);
 
     res.json(reportData);
 

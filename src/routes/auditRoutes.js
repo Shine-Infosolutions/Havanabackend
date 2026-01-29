@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const auditController = require('../controllers/auditController');
+const auditHealthController = require('../controllers/auditHealthController');
+
+// Health check for audit system
+router.get('/health', auditHealthController.auditHealthCheck);
+
+// Get audit statistics
+router.get('/stats', auditHealthController.getAuditStats);
 
 // Get all audit logs
 router.get('/logs', auditController.getAuditLogs);

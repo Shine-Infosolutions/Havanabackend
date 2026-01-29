@@ -4,12 +4,20 @@ const { getAuditLogModel } = require('../models/AuditLogModel');
 exports.getAuditLogs = async (req, res) => {
   try {
     const AuditLog = await getAuditLogModel();
+    if (!AuditLog) {
+      return res.status(503).json({ 
+        error: 'Audit service unavailable',
+        message: 'Audit database connection not available'
+      });
+    }
+    
     const logs = await AuditLog.find()
       .sort({ timestamp: -1 })
       .limit(100);
     
     res.json({ success: true, logs });
   } catch (error) {
+    console.error('❌ Error fetching audit logs:', error.message);
     res.status(500).json({ error: error.message });
   }
 };
@@ -19,12 +27,20 @@ exports.getAuditLogsByModule = async (req, res) => {
   try {
     const { module } = req.params;
     const AuditLog = await getAuditLogModel();
+    if (!AuditLog) {
+      return res.status(503).json({ 
+        error: 'Audit service unavailable',
+        message: 'Audit database connection not available'
+      });
+    }
+    
     const logs = await AuditLog.find({ module })
       .sort({ timestamp: -1 })
       .limit(50);
     
     res.json({ success: true, logs });
   } catch (error) {
+    console.error('❌ Error fetching audit logs by module:', error.message);
     res.status(500).json({ error: error.message });
   }
 };
@@ -34,11 +50,19 @@ exports.getAuditLogsByRecord = async (req, res) => {
   try {
     const { recordId } = req.params;
     const AuditLog = await getAuditLogModel();
+    if (!AuditLog) {
+      return res.status(503).json({ 
+        error: 'Audit service unavailable',
+        message: 'Audit database connection not available'
+      });
+    }
+    
     const logs = await AuditLog.find({ recordId })
       .sort({ timestamp: -1 });
     
     res.json({ success: true, logs });
   } catch (error) {
+    console.error('❌ Error fetching audit logs by record:', error.message);
     res.status(500).json({ error: error.message });
   }
 };

@@ -1,6 +1,29 @@
 const CashTransaction = require('../models/CashTransaction');
 const mongoose = require('mongoose');
 const ExcelJS = require('exceljs');
+const { getAuditLogModel } = require('../models/AuditLogModel');
+
+// Helper function to create audit log
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'CASH_TRANSACTION',
+        recordId,
+        userId: userId || 'SYSTEM',
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // 💰 Get cash summary + optional filters (date, week, month, year, today, source, custom range) + pagination
 const getCashAtReception = async (req, res) => {
@@ -128,6 +151,9 @@ const addCashTransaction = async (req, res) => {
       source: source.toUpperCase(),
       receptionistId,
     });
+
+    // Create audit log
+    await createAuditLog('CREATE', transaction._id, req.user?.id, req.user?.role, null, transaction.toObject(), req);
 
     res.status(201).json({ message: 'Transaction added successfully', transaction });
   } catch (err) {
