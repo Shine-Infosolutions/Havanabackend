@@ -1,4 +1,30 @@
 const RestaurantOrder = require('../models/RestaurantOrder.js');
+const { getAuditLogModel } = require('../models/AuditLogModel');
+const mongoose = require('mongoose');
+
+// Helper function to create audit log (non-blocking)
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  // Run asynchronously without blocking main operation
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'RESTAURANT_ORDER',
+        recordId,
+        userId: userId || new mongoose.Types.ObjectId(),
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+      console.log(`✅ Audit log created: ${action} for restaurant order ${recordId}`);
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // Create new restaurant order
 exports.createOrder = async (req, res) => {
@@ -25,6 +51,10 @@ exports.createOrder = async (req, res) => {
     
     const order = new RestaurantOrder(orderData);
     await order.save();
+
+    // Create audit log
+    createAuditLog('CREATE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
+
     res.status(201).json(order);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -57,27 +87,20 @@ exports.updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     
+    // Get original data for audit log
+    const originalOrder = await RestaurantOrder.findById(id);
+    if (!originalOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
     const order = await RestaurantOrder.findByIdAndUpdate(
       id,
       { status },
       { new: true }
     );
     
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-    
-    // Socket.IO removed - no real-time updates
-    // const io = req.app.get('io');
-    // if (io) {
-    //   io.emit('order-status-update', {
-    //     orderId: order._id,
-    //     status: order.status,
-    //     tableNo: order.tableNo,
-    //     customerName: order.customerName,
-    //     timestamp: new Date().toISOString()
-    //   });
-    // }
+    // Create audit log
+    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
     
     res.json(order);
   } catch (error) {
@@ -91,15 +114,20 @@ exports.updateOrder = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
+    // Get original data for audit log
+    const originalOrder = await RestaurantOrder.findById(id);
+    if (!originalOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
     const order = await RestaurantOrder.findByIdAndUpdate(
       id,
       updateData,
       { new: true }
     );
     
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    // Create audit log
+    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
     
     // Also update corresponding KOT if items were updated
     if (updateData.items) {

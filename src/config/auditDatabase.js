@@ -65,15 +65,15 @@ const connectAuditDB = async () => {
 };
 
 const getAuditConnection = async () => {
-  if (!auditConnection || auditConnection.readyState !== 1) {
-    try {
+  try {
+    if (!auditConnection || auditConnection.readyState !== 1) {
       auditConnection = await connectAuditDB();
-    } catch (error) {
-      console.error('Failed to get audit connection:', error.message);
-      return null; // Return null instead of throwing error
     }
+    return auditConnection;
+  } catch (error) {
+    console.error('❌ Failed to get audit connection:', error.message);
+    return null; // Return null instead of throwing error
   }
-  return auditConnection;
 };
 
 module.exports = {

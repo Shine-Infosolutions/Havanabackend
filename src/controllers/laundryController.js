@@ -3,11 +3,37 @@ const LaundryItem = require('../models/LaundryItem');
 const LaundryLoss = require('../models/LaundryLoss');
 const LaundryVendor = require('../models/LaundryVendor');
 const mongoose = require('mongoose');
+const { getAuditLogModel } = require('../models/AuditLogModel');
+
+// Helper function to create audit log
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'LAUNDRY',
+        recordId,
+        userId: userId || 'SYSTEM',
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // Create Order
 exports.createLaundryOrder = async (req, res) => {
   try {
     const order = await Laundry.create(req.body);
+    
+    // Create audit log
+    await createAuditLog('CREATE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
     
     // Add item status summary
     const itemStatusCounts = order.items.reduce((acc, item) => {
@@ -114,8 +140,14 @@ exports.getLaundryOrderById = async (req, res) => {
 // Update Order
 exports.updateLaundryOrder = async (req, res) => {
   try {
+    // Get original data for audit log
+    const originalOrder = await Laundry.findById(req.params.id);
+    if (!originalOrder) return res.status(404).json({ error: 'Order not found' });
+    
     const order = await Laundry.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    
+    // Create audit log
+    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
     
     // Add item status summary
     const itemStatusCounts = order.items.reduce((acc, item) => {
@@ -141,6 +173,8 @@ exports.updateLaundryStatus = async (req, res) => {
     const order = await Laundry.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     
+    const originalData = order.toObject();
+    
     order.laundryStatus = laundryStatus;
     
     // Optionally update all item statuses to match order status
@@ -153,6 +187,10 @@ exports.updateLaundryStatus = async (req, res) => {
     }
     
     await order.save();
+    
+    // Create audit log
+    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -573,8 +611,13 @@ exports.updateLossReportStatus = async (req, res) => {
 // Delete Order
 exports.deleteLaundry = async (req, res) => {
   try {
-    const order = await Laundry.findByIdAndDelete(req.params.id);
+    const order = await Laundry.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // Create audit log
+    await createAuditLog('DELETE', order._id, req.user?.id, req.user?.role, order.toObject(), null, req);
+
+    await Laundry.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Order deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

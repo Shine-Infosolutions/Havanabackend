@@ -2,6 +2,29 @@ const Room = require("../models/Room.js");
 const Category = require("../models/Category.js");
 const Booking = require("../models/Booking.js");
 const cloudinary = require('../utils/cloudinary');
+const { getAuditLogModel } = require('../models/AuditLogModel');
+
+// Helper function to create audit log
+const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
+  setImmediate(async () => {
+    try {
+      const AuditLog = await getAuditLogModel();
+      await AuditLog.create({
+        action,
+        module: 'ROOM',
+        recordId,
+        userId: userId || 'SYSTEM',
+        userRole: userRole || 'SYSTEM',
+        oldData,
+        newData,
+        ipAddress: req?.ip || req?.connection?.remoteAddress,
+        userAgent: req?.get('User-Agent')
+      });
+    } catch (error) {
+      console.error('❌ Audit log creation failed:', error);
+    }
+  });
+};
 
 // Upload base64 image to Cloudinary
 const uploadBase64ToCloudinary = async (base64String) => {
@@ -61,6 +84,9 @@ exports.createRoom = async (req, res) => {
       images: uploadedImages,
     });
     await room.save();
+
+    // Create audit log
+    await createAuditLog('CREATE', room._id, req.user?.id, req.user?.role, null, room.toObject(), req);
 
     // Count rooms per category and get all room numbers for the created room's category
     const categories = await Room.aggregate([
@@ -146,6 +172,10 @@ exports.updateRoom = async (req, res) => {
   try {
     const updates = req.body;
     
+    // Get original data for audit log
+    const originalRoom = await Room.findById(req.params.id);
+    if (!originalRoom) return res.status(404).json({ error: "Room not found" });
+    
     // Handle image uploads if provided
     if (updates.images && Array.isArray(updates.images)) {
       const uploadedImages = [];
@@ -164,7 +194,10 @@ exports.updateRoom = async (req, res) => {
       new: true,
       runValidators: true,
     });
-    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    // Create audit log
+    await createAuditLog('UPDATE', room._id, req.user?.id, req.user?.role, originalRoom.toObject(), room.toObject(), req);
+
     res.json(room);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -174,8 +207,13 @@ exports.updateRoom = async (req, res) => {
 // Delete a room
 exports.deleteRoom = async (req, res) => {
   try {
-    const room = await Room.findByIdAndDelete(req.params.id);
+    const room = await Room.findById(req.params.id);
     if (!room) return res.status(404).json({ error: "Room not found" });
+
+    // Create audit log
+    await createAuditLog('DELETE', room._id, req.user?.id, req.user?.role, room.toObject(), null, req);
+
+    await Room.findByIdAndDelete(req.params.id);
     res.json({ message: "Room deleted" });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -239,8 +277,12 @@ exports.updateRoomStatus = async (req, res) => {
     const room = await Room.findById(id);
     if (!room) return res.status(404).json({ error: "Room not found" });
     
+    const originalData = room.toObject();
     room.status = status;
     await room.save();
+    
+    // Create audit log
+    await createAuditLog('UPDATE', room._id, req.user?.id, req.user?.role, originalData, room.toObject(), req);
     
     res.json({ success: true, room });
   } catch (error) {
