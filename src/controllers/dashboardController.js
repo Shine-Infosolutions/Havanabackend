@@ -2,6 +2,7 @@ const Booking = require('../models/Booking');
 const RestaurantOrder = require('../models/RestaurantOrder');
 const RoomService = require('../models/RoomService');
 const Laundry = require('../models/Laundry');
+const Room = require('../models/Room');
 
 exports.getDashboardStats = async (req, res) => {
   try {
@@ -84,7 +85,10 @@ exports.getDashboardStats = async (req, res) => {
       laundryOrders,
       restaurantOrders,
       todayCheckIns,
-      todayCheckOuts
+      todayCheckOuts,
+      rooms,
+      totalLaundryOrders,
+      totalRestaurantOrders
     ] = await Promise.all([
       Booking.countDocuments(baseQuery),
       Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
@@ -108,7 +112,10 @@ exports.getDashboardStats = async (req, res) => {
       Laundry.countDocuments(baseQuery),
       RestaurantOrder.countDocuments(dateFilter),
       Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked In', checkInDate: todayFilter }),
-      Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter })
+      Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter }),
+      Room.find({ deleted: { $ne: true } }).populate('categoryId').lean(),
+      Laundry.countDocuments({ deleted: { $ne: true } }),
+      RestaurantOrder.countDocuments({ deleted: { $ne: true } })
     ]);
 
     const cashPayments = cashPaymentsMain + cashPaymentsAdvance;
@@ -128,11 +135,12 @@ exports.getDashboardStats = async (req, res) => {
         totalRevenue: totalRevenue[0]?.total || 0,
         cashRevenue: cashRevenue[0]?.total || 0,
         onlineRevenue: onlineRevenue[0]?.total || 0,
-        laundryOrders,
-        restaurantOrders,
+        laundryOrders: totalLaundryOrders || 0,
+        restaurantOrders: totalRestaurantOrders || 0,
         todayCheckIns,
         todayCheckOuts
-      }
+      },
+      rooms: rooms || []
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
