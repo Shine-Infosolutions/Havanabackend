@@ -1,4 +1,5 @@
 const MenuItem = require("../models/MenuItem");
+const { createAuditLog } = require('../utils/auditLogger');
 
 // Get all menu items
 exports.getAllMenuItems = async (req, res) => {
@@ -41,6 +42,9 @@ exports.addMenuItem = async (req, res) => {
     });
     await menuItem.save();
     
+    // Create audit log
+    createAuditLog('CREATE', 'MENU_ITEM', menuItem._id, req.user?.id, req.user?.role, null, menuItem.toObject(), req);
+    
     res.status(201).json({ success: true, data: menuItem });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -53,10 +57,16 @@ exports.updateMenuItem = async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
     
-    const menuItem = await MenuItem.findByIdAndUpdate(id, updates, { new: true });
-    if (!menuItem) {
+    // Get original data for audit log
+    const originalMenuItem = await MenuItem.findById(id);
+    if (!originalMenuItem) {
       return res.status(404).json({ success: false, message: "Menu item not found" });
     }
+    
+    const menuItem = await MenuItem.findByIdAndUpdate(id, updates, { new: true });
+    
+    // Create audit log
+    createAuditLog('UPDATE', 'MENU_ITEM', menuItem._id, req.user?.id, req.user?.role, originalMenuItem.toObject(), menuItem.toObject(), req);
     
     res.json({ success: true, data: menuItem });
   } catch (error) {
@@ -68,11 +78,17 @@ exports.updateMenuItem = async (req, res) => {
 exports.deleteMenuItem = async (req, res) => {
   try {
     const { id } = req.params;
-  
-    const menuItem = await MenuItem.findByIdAndUpdate(id, { isActive: false }, { new: true });
-    if (!menuItem) {
+    
+    // Get original data for audit log
+    const originalMenuItem = await MenuItem.findById(id);
+    if (!originalMenuItem) {
       return res.status(404).json({ success: false, message: "Menu item not found" });
     }
+  
+    const menuItem = await MenuItem.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    
+    // Create audit log
+    createAuditLog('DELETE', 'MENU_ITEM', menuItem._id, req.user?.id, req.user?.role, originalMenuItem.toObject(), menuItem.toObject(), req);
     
     res.json({ success: true, message: "Menu item deleted successfully" });
   } catch (error) {

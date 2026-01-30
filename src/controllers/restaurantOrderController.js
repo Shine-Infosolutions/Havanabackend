@@ -1,30 +1,8 @@
 const RestaurantOrder = require('../models/RestaurantOrder.js');
-const { getAuditLogModel } = require('../models/AuditLogModel');
+const { createAuditLog } = require('../utils/auditLogger');
 const mongoose = require('mongoose');
 
-// Helper function to create audit log (non-blocking)
-const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
-  // Run asynchronously without blocking main operation
-  setImmediate(async () => {
-    try {
-      const AuditLog = await getAuditLogModel();
-      await AuditLog.create({
-        action,
-        module: 'RESTAURANT_ORDER',
-        recordId,
-        userId: userId || new mongoose.Types.ObjectId(),
-        userRole: userRole || 'SYSTEM',
-        oldData,
-        newData,
-        ipAddress: req?.ip || req?.connection?.remoteAddress,
-        userAgent: req?.get('User-Agent')
-      });
-      console.log(`✅ Audit log created: ${action} for restaurant order ${recordId}`);
-    } catch (error) {
-      console.error('❌ Audit log creation failed:', error);
-    }
-  });
-};
+
 
 // Create new restaurant order
 exports.createOrder = async (req, res) => {
@@ -53,7 +31,7 @@ exports.createOrder = async (req, res) => {
     await order.save();
 
     // Create audit log
-    createAuditLog('CREATE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
+    createAuditLog('CREATE', 'RESTAURANT_ORDER', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
 
     res.status(201).json(order);
   } catch (error) {
@@ -100,7 +78,7 @@ exports.updateOrderStatus = async (req, res) => {
     );
     
     // Create audit log
-    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
+    createAuditLog('UPDATE', 'RESTAURANT_ORDER', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
     
     res.json(order);
   } catch (error) {
@@ -127,7 +105,7 @@ exports.updateOrder = async (req, res) => {
     );
     
     // Create audit log
-    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
+    createAuditLog('UPDATE', 'RESTAURANT_ORDER', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
     
     // Also update corresponding KOT if items were updated
     if (updateData.items) {
@@ -135,12 +113,16 @@ exports.updateOrder = async (req, res) => {
         const KOT = require('../models/KOT');
         const kot = await KOT.findOne({ orderId: id });
         if (kot) {
+          const originalKOT = kot.toObject();
           const kotItems = updateData.items.map(item => ({
             itemName: item.itemName,
             quantity: item.quantity,
             specialInstructions: item.note || ''
           }));
-          await KOT.findByIdAndUpdate(kot._id, { items: kotItems });
+          const updatedKOT = await KOT.findByIdAndUpdate(kot._id, { items: kotItems }, { new: true });
+          
+          // Create audit log for KOT update
+          createAuditLog('UPDATE', 'KOT', kot._id, req.user?.id, req.user?.role, originalKOT, updatedKOT.toObject(), req);
         }
       } catch (kotError) {
         console.error('Error updating KOT:', kotError);
