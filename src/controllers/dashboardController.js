@@ -86,7 +86,9 @@ exports.getDashboardStats = async (req, res) => {
       restaurantOrders,
       todayCheckIns,
       todayCheckOuts,
-      rooms
+      rooms,
+      totalLaundryOrders,
+      totalRestaurantOrders
     ] = await Promise.all([
       Booking.countDocuments(baseQuery),
       Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
@@ -111,7 +113,9 @@ exports.getDashboardStats = async (req, res) => {
       RestaurantOrder.countDocuments(dateFilter),
       Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked In', checkInDate: todayFilter }),
       Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter }),
-      Room.find({ deleted: { $ne: true } }).populate('categoryId').lean()
+      Room.find({ deleted: { $ne: true } }).populate('categoryId').lean(),
+      Laundry.countDocuments({ deleted: { $ne: true } }),
+      RestaurantOrder.countDocuments({ deleted: { $ne: true } })
     ]);
 
     const cashPayments = cashPaymentsMain + cashPaymentsAdvance;
@@ -131,8 +135,8 @@ exports.getDashboardStats = async (req, res) => {
         totalRevenue: totalRevenue[0]?.total || 0,
         cashRevenue: cashRevenue[0]?.total || 0,
         onlineRevenue: onlineRevenue[0]?.total || 0,
-        laundryOrders,
-        restaurantOrders,
+        laundryOrders: totalLaundryOrders || 0,
+        restaurantOrders: totalRestaurantOrders || 0,
         todayCheckIns,
         todayCheckOuts
       },
