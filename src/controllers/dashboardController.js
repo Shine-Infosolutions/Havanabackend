@@ -88,7 +88,8 @@ exports.getDashboardStats = async (req, res) => {
       todayCheckOuts,
       rooms,
       totalLaundryOrders,
-      totalRestaurantOrders
+      totalRestaurantOrders,
+      bookingDetails
     ] = await Promise.all([
       Booking.countDocuments(baseQuery),
       Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
@@ -115,7 +116,8 @@ exports.getDashboardStats = async (req, res) => {
       Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter }),
       Room.find({ deleted: { $ne: true } }).populate('categoryId').lean(),
       Laundry.countDocuments({ deleted: { $ne: true } }),
-      RestaurantOrder.countDocuments({ deleted: { $ne: true } })
+      RestaurantOrder.countDocuments({ deleted: { $ne: true } }),
+      Booking.find({ deleted: { $ne: true } }).sort({ createdAt: -1 }).lean()
     ]);
 
     const cashPayments = cashPaymentsMain + cashPaymentsAdvance;
@@ -140,7 +142,8 @@ exports.getDashboardStats = async (req, res) => {
         todayCheckIns,
         todayCheckOuts
       },
-      rooms: rooms || []
+      rooms: rooms || [],
+      bookings: bookingDetails || []
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
