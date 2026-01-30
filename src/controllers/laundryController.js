@@ -3,29 +3,9 @@ const LaundryItem = require('../models/LaundryItem');
 const LaundryLoss = require('../models/LaundryLoss');
 const LaundryVendor = require('../models/LaundryVendor');
 const mongoose = require('mongoose');
-const { getAuditLogModel } = require('../models/AuditLogModel');
+const { createAuditLog } = require('../utils/auditLogger');
 
-// Helper function to create audit log
-const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
-  setImmediate(async () => {
-    try {
-      const AuditLog = await getAuditLogModel();
-      await AuditLog.create({
-        action,
-        module: 'LAUNDRY',
-        recordId,
-        userId: userId || 'SYSTEM',
-        userRole: userRole || 'SYSTEM',
-        oldData,
-        newData,
-        ipAddress: req?.ip || req?.connection?.remoteAddress,
-        userAgent: req?.get('User-Agent')
-      });
-    } catch (error) {
-      console.error('❌ Audit log creation failed:', error);
-    }
-  });
-};
+
 
 // Create Order
 exports.createLaundryOrder = async (req, res) => {
@@ -33,7 +13,7 @@ exports.createLaundryOrder = async (req, res) => {
     const order = await Laundry.create(req.body);
     
     // Create audit log
-    await createAuditLog('CREATE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
+    createAuditLog('CREATE', 'LAUNDRY', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
     
     // Add item status summary
     const itemStatusCounts = order.items.reduce((acc, item) => {
@@ -147,7 +127,7 @@ exports.updateLaundryOrder = async (req, res) => {
     const order = await Laundry.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     
     // Create audit log
-    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
+    createAuditLog('UPDATE', 'LAUNDRY', order._id, req.user?.id, req.user?.role, originalOrder.toObject(), order.toObject(), req);
     
     // Add item status summary
     const itemStatusCounts = order.items.reduce((acc, item) => {
@@ -189,7 +169,7 @@ exports.updateLaundryStatus = async (req, res) => {
     await order.save();
     
     // Create audit log
-    await createAuditLog('UPDATE', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    createAuditLog('UPDATE', 'LAUNDRY', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
     
     res.json({ success: true, order });
   } catch (err) {
@@ -204,6 +184,8 @@ exports.cancelLaundryOrder = async (req, res) => {
     const order = await Laundry.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     
+    const originalData = order.toObject();
+    
     order.laundryStatus = 'cancelled';
     
     // Optionally cancel all items
@@ -216,6 +198,10 @@ exports.cancelLaundryOrder = async (req, res) => {
     }
     
     await order.save();
+    
+    // Create audit log
+    createAuditLog('UPDATE', 'LAUNDRY', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -473,11 +459,17 @@ exports.reportDamageOrLoss = async (req, res) => {
     const item = order.items.id(itemId);
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
+    const originalData = order.toObject();
+    
     item.damageReported = true;
     item.itemNotes = `${reportType?.toUpperCase() || 'DAMAGE'}: ${description}`;
     item.status = reportType === 'loss' ? 'lost' : 'cancelled';
     
     await order.save();
+    
+    // Create audit log
+    createAuditLog('UPDATE', 'LAUNDRY', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order, message: `Item ${reportType || 'damage'} reported successfully` });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -615,7 +607,7 @@ exports.deleteLaundry = async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     // Create audit log
-    await createAuditLog('DELETE', order._id, req.user?.id, req.user?.role, order.toObject(), null, req);
+    createAuditLog('DELETE', 'LAUNDRY', order._id, req.user?.id, req.user?.role, order.toObject(), null, req);
 
     await Laundry.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Order deleted' });

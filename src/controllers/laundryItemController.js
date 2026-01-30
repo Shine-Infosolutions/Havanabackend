@@ -1,5 +1,6 @@
 const LaundryItem = require('../models/LaundryItem.js');
 const LaundryVendor = require('../models/LaundryVendor.js');
+const { createAuditLog } = require('../utils/auditLogger');
 
 // Create a new laundry item
 exports.createLaundryItem = async (req, res) => {
@@ -28,6 +29,10 @@ exports.createLaundryItem = async (req, res) => {
     
     const laundryItem = new LaundryItem({ categoryId, itemName, rate, unit, vendorId, isActive });
     await laundryItem.save();
+    
+    // Create audit log
+    createAuditLog('CREATE', 'LAUNDRY_ITEM', laundryItem._id, req.user?.id, req.user?.role, null, laundryItem.toObject(), req);
+    
     res.status(201).json({ success: true, laundryItem });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -80,12 +85,19 @@ exports.updateLaundryItem = async (req, res) => {
       }
     }
     
+    // Get original data for audit log
+    const originalItem = await LaundryItem.findById(req.params.id);
+    if (!originalItem) return res.status(404).json({ error: 'Laundry item not found' });
+    
     const laundryItem = await LaundryItem.findByIdAndUpdate(
       req.params.id,
       { categoryId, itemName, rate, unit, vendorId, isActive },
       { new: true, runValidators: true }
     ).populate('vendorId', 'vendorName');
-    if (!laundryItem) return res.status(404).json({ error: 'Laundry item not found' });
+    
+    // Create audit log
+    createAuditLog('UPDATE', 'LAUNDRY_ITEM', laundryItem._id, req.user?.id, req.user?.role, originalItem.toObject(), laundryItem.toObject(), req);
+    
     res.json({ success: true, laundryItem });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -95,8 +107,13 @@ exports.updateLaundryItem = async (req, res) => {
 // Delete a laundry item
 exports.deleteLaundryItem = async (req, res) => {
   try {
-    const laundryItem = await LaundryItem.findByIdAndDelete(req.params.id);
+    const laundryItem = await LaundryItem.findById(req.params.id);
     if (!laundryItem) return res.status(404).json({ error: 'Laundry item not found' });
+    
+    // Create audit log
+    createAuditLog('DELETE', 'LAUNDRY_ITEM', laundryItem._id, req.user?.id, req.user?.role, laundryItem.toObject(), null, req);
+    
+    await LaundryItem.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Laundry item deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

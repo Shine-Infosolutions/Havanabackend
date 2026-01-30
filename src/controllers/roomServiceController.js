@@ -1,5 +1,5 @@
 const RoomService = require("../models/RoomService");
-const { getAuditLogModel } = require('../models/AuditLogModel');
+const { createAuditLog } = require('../utils/auditLogger');
 let RestaurantOrder;
 try {
   RestaurantOrder = require("../models/RestaurantOrder");
@@ -7,27 +7,7 @@ try {
   console.warn('RestaurantOrder model not found, room service will work with RoomService model only');
 }
 
-// Helper function to create audit log
-const createAuditLog = (action, recordId, userId, userRole, oldData, newData, req) => {
-  setImmediate(async () => {
-    try {
-      const AuditLog = await getAuditLogModel();
-      await AuditLog.create({
-        action,
-        module: 'ROOM_SERVICE',
-        recordId,
-        userId: userId || 'SYSTEM',
-        userRole: userRole || 'SYSTEM',
-        oldData,
-        newData,
-        ipAddress: req?.ip || req?.connection?.remoteAddress,
-        userAgent: req?.get('User-Agent')
-      });
-    } catch (error) {
-      console.error('❌ Audit log creation failed:', error);
-    }
-  });
-};
+
 
 // Create room service order (integrates with restaurant orders)
 exports.createOrder = async (req, res) => {
@@ -81,7 +61,7 @@ exports.createOrder = async (req, res) => {
     await order.save();
 
     // Create audit log
-    await createAuditLog('CREATE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
+    createAuditLog('CREATE', 'ROOM_SERVICE', order._id, req.user?.id, req.user?.role, null, order.toObject(), req);
 
     res.status(201).json({ success: true, message: 'Room service order created successfully', order });
   } catch (error) {
@@ -216,7 +196,7 @@ exports.updateOrder = async (req, res) => {
     );
     
     // Create audit log
-    await createAuditLog('UPDATE', updatedOrder._id, req.user?.id, req.user?.role, originalData, updatedOrder.toObject(), req);
+    createAuditLog('UPDATE', 'ROOM_SERVICE', updatedOrder._id, req.user?.id, req.user?.role, originalData, updatedOrder.toObject(), req);
     
     res.json({ success: true, order: updatedOrder });
   } catch (error) {
@@ -233,11 +213,16 @@ exports.updateOrderStatus = async (req, res) => {
     if (!order && RestaurantOrder) {
       order = await RestaurantOrder.findById(req.params.id);
       if (order) {
+        const originalData = order.toObject();
         order.status = status;
         if (status === "delivered" || status === "served") {
           order.deliveryTime = new Date();
         }
         await order.save();
+        
+        // Create audit log for restaurant order
+        createAuditLog('UPDATE', 'RESTAURANT_ORDER', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+        
         return res.json({ success: true, order });
       }
     }
@@ -246,12 +231,17 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    const originalData = order.toObject();
     order.status = status;
     if (status === "delivered") {
       order.deliveryTime = new Date();
     }
 
     await order.save();
+    
+    // Create audit log
+    createAuditLog('UPDATE', 'ROOM_SERVICE', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -267,6 +257,8 @@ exports.updateNCStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    const originalData = order.toObject();
 
     if (itemIndex !== undefined) {
       // Update item-level NC status
@@ -292,6 +284,10 @@ exports.updateNCStatus = async (req, res) => {
     }
 
     await order.save();
+    
+    // Create audit log
+    createAuditLog('UPDATE', 'ROOM_SERVICE', order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -317,6 +313,8 @@ exports.generateKOT = async (req, res) => {
       return res.status(400).json({ message: "KOT already generated" });
     }
 
+    const originalData = order.toObject();
+
     // Generate 4-digit KOT number
     const KOT = require('../models/KOT');
     const today = new Date();
@@ -335,6 +333,11 @@ exports.generateKOT = async (req, res) => {
     order.status = "confirmed";
 
     await order.save();
+    
+    // Create audit log
+    const module = isRestaurantOrder ? 'RESTAURANT_ORDER' : 'ROOM_SERVICE';
+    createAuditLog('UPDATE', module, order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order, kotNumber });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -360,12 +363,18 @@ exports.generateBill = async (req, res) => {
       return res.status(400).json({ message: "Bill already generated" });
     }
 
+    const originalData = order.toObject();
     const billNumber = `BILL${Date.now().toString().slice(-8)}`;
     order.billGenerated = true;
     order.billNumber = billNumber;
     order.billGeneratedAt = new Date();
 
     await order.save();
+    
+    // Create audit log
+    const module = isRestaurantOrder ? 'RESTAURANT_ORDER' : 'ROOM_SERVICE';
+    createAuditLog('UPDATE', module, order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
+    
     res.json({ success: true, order, billNumber });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -500,17 +509,24 @@ exports.updatePaymentStatus = async (req, res) => {
   try {
     const { paymentStatus } = req.body;
     let order = await RoomService.findById(req.params.id);
+    let isRestaurantOrder = false;
 
     if (!order && RestaurantOrder) {
       order = await RestaurantOrder.findById(req.params.id);
+      isRestaurantOrder = true;
     }
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    const originalData = order.toObject();
     order.paymentStatus = paymentStatus;
     await order.save();
+
+    // Create audit log
+    const module = isRestaurantOrder ? 'RESTAURANT_ORDER' : 'ROOM_SERVICE';
+    createAuditLog('UPDATE', module, order._id, req.user?.id, req.user?.role, originalData, order.toObject(), req);
 
     res.json({ success: true, order });
   } catch (error) {
@@ -534,7 +550,7 @@ exports.deleteOrder = async (req, res) => {
     }
 
     // Create audit log
-    await createAuditLog('DELETE', order._id, req.user?.id, req.user?.role, order.toObject(), null, req);
+    createAuditLog('DELETE', 'ROOM_SERVICE', order._id, req.user?.id, req.user?.role, order.toObject(), null, req);
 
     if (isRestaurantOrder) {
       await RestaurantOrder.findByIdAndDelete(req.params.id);
