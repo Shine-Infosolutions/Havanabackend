@@ -103,10 +103,12 @@ const connectToMongoDB = async () => {
     isConnected = true;
     console.log("MongoDB connected successfully");
     
-    // Optimize database with indexes (run once)
-    if (process.env.NODE_ENV !== 'production') {
-      await optimizeDatabase();
-    }
+    // Optimize database with indexes (run once after connection is stable)
+    setTimeout(async () => {
+      if (mongoose.connection.readyState === 1) {
+        await optimizeDatabase();
+      }
+    }, 1000);
     
   } catch (error) {
     console.error("Database connection failed:", error.message);
