@@ -178,91 +178,59 @@ const bookingSchema = new mongoose.Schema({
   deletedBy: { type: String },
 }, { timestamps: true });
 
-// Add bookingNo index for fast lookups
+// Critical indexes for performance
 bookingSchema.index({ bookingNo: 1 }, { unique: true });
+bookingSchema.index({ grcNo: 1 }, { unique: true });
+bookingSchema.index({ invoiceNumber: 1 }, { unique: true, sparse: true });
+bookingSchema.index({ deleted: 1, status: 1, checkInDate: 1 });
+bookingSchema.index({ deleted: 1, createdAt: -1 });
+bookingSchema.index({ mobileNo: 1, deleted: 1 });
+bookingSchema.index({ roomNumber: 1, checkInDate: 1, checkOutDate: 1 });
 
-// Pre-save middleware to generate unique bookingNo and invoiceNumber
+// Optimized pre-save middleware
 bookingSchema.pre('save', async function(next) {
   if (!this.bookingNo) {
     let unique = false;
     while (!unique) {
-      const timestamp = Date.now();
-      const bookingNo = `BK${timestamp}`;
-      const existing = await this.constructor.findOne({ bookingNo });
+      const bookingNo = `BK${Date.now()}${Math.random().toString(36).substr(2, 3)}`;
+      const existing = await this.constructor.findOne({ bookingNo }).lean();
       if (!existing) {
         this.bookingNo = bookingNo;
         unique = true;
       }
-      // Add small delay to ensure different timestamp if collision
-      await new Promise(resolve => setTimeout(resolve, 1));
     }
   }
   
-  // Generate invoice number if not exists
   if (!this.invoiceNumber) {
-    console.log('🔥 Generating invoice number...');
-    const currentDate = new Date();
-    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const lastInvoice = await this.constructor.findOne(
+      { deleted: { $ne: true }, invoiceNumber: { $regex: `^HH/${month}/` } },
+      { invoiceNumber: 1 }
+    ).sort({ invoiceNumber: -1 }).lean();
     
-    // Find all existing invoice numbers (excluding deleted)
-    const existingInvoices = await this.constructor.find({
-      deleted: { $ne: true },
-      invoiceNumber: { $exists: true, $ne: null }
-    }).select('invoiceNumber').lean();
-    
-    console.log('📋 Existing invoices:', existingInvoices);
-    
-    // Extract numbers and find highest
-    let maxNumber = 0;
-    existingInvoices.forEach(invoice => {
-      const parts = invoice.invoiceNumber.split('/');
-      if (parts.length === 3) {
-        const num = parseInt(parts[2]);
-        if (num > maxNumber) maxNumber = num;
-      }
-    });
-    
-    const nextNumber = maxNumber + 1;
-    const sequence = String(nextNumber).padStart(4, '0');
-    this.invoiceNumber = `HH/${month}/${sequence}`;
-    
-    console.log('✅ Generated invoice:', this.invoiceNumber);
+    const nextNum = lastInvoice ? 
+      parseInt(lastInvoice.invoiceNumber.split('/')[2]) + 1 : 1;
+    this.invoiceNumber = `HH/${month}/${String(nextNum).padStart(4, '0')}`;
   }
   
-  // 🔹 Calculate Late Checkout Fine
-  if (this.actualCheckOutTime && this.status === 'Checked Out' && !this.lateCheckoutFine.applied) {
-    const checkoutDate = new Date(this.checkOutDate);
+  if (this.actualCheckOutTime && this.status === 'Checked Out' && !this.lateCheckoutFine.applied && this.timeOut) {
     const [hours, minutes] = this.timeOut.split(':').map(Number);
+    const expectedTime = new Date(this.checkOutDate);
+    expectedTime.setHours(hours, minutes, 0, 0);
     
-    // Create expected checkout time without mutating original date
-    const expectedCheckoutTime = new Date(checkoutDate.getFullYear(), checkoutDate.getMonth(), checkoutDate.getDate(), hours, minutes, 0, 0);
-    
-    const actualCheckout = new Date(this.actualCheckOutTime);
-    const timeDiffMs = actualCheckout - expectedCheckoutTime;
-    
-    console.log(`🔍 Debug: Expected: ${expectedCheckoutTime.toISOString()}, Actual: ${actualCheckout.toISOString()}, Diff: ${timeDiffMs}ms`);
-    
-    if (timeDiffMs > 0) {
-      const minutesLate = Math.ceil(timeDiffMs / (1000 * 60));
+    const timeDiff = new Date(this.actualCheckOutTime) - expectedTime;
+    if (timeDiff > 0) {
+      const minutesLate = Math.ceil(timeDiff / 60000);
       const gracePeriod = this.lateCheckoutFine.gracePeriodMinutes || 15;
       
-      // Validation: Only apply fine if late by reasonable amount (max 24 hours)
-      if (minutesLate > gracePeriod && minutesLate <= 1440) { // 1440 minutes = 24 hours
+      if (minutesLate > gracePeriod && minutesLate <= 1440) {
         const chargeableMinutes = minutesLate - gracePeriod;
-        const chargeableHours = Math.ceil(chargeableMinutes / 60); // Round up to next hour
-        const fineAmount = chargeableHours * (this.lateCheckoutFine.finePerHour || 500);
-        
+        const chargeableHours = Math.ceil(chargeableMinutes / 60);
         this.lateCheckoutFine.minutesLate = minutesLate;
-        this.lateCheckoutFine.amount = fineAmount;
+        this.lateCheckoutFine.amount = chargeableHours * (this.lateCheckoutFine.finePerHour || 500);
         this.lateCheckoutFine.applied = true;
         this.lateCheckoutFine.appliedAt = new Date();
-        
-        console.log(`⏰ Late checkout fine applied: ₹${fineAmount} for ${chargeableHours} hour(s) (${chargeableMinutes} minutes late)`);
-      } else if (minutesLate > 1440) {
-        console.log(`⚠️ Checkout time difference too large (${minutesLate} minutes). Fine not applied.`);
       }
-    } else {
-      console.log(`✅ Early checkout - no fine applied`);
     }
   }
   
