@@ -38,6 +38,8 @@ const reportRoutes = require("./src/routes/reportRoutes.js");
 const housekeepingRoutes = require("./src/routes/housekeepingRoutes.js");
 
 const { connectAuditDB } = require("./src/config/auditDatabase.js");
+const { optimizeDatabase } = require("./src/utils/dbOptimization.js");
+const { performanceMonitor } = require("./src/middleware/performanceMonitor.js");
 const path = require("path");
 
 // Initialize express app
@@ -58,6 +60,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "50mb" }));
+app.use(performanceMonitor);
 
 // Block ALL socket.io requests silently without logging
 app.use((req, res, next) => {
@@ -99,6 +102,11 @@ const connectToMongoDB = async () => {
     await mongoose.connect(process.env.MONGO_URI, connectionOptions);
     isConnected = true;
     console.log("MongoDB connected successfully");
+    
+    // Optimize database with indexes (run once)
+    if (process.env.NODE_ENV !== 'production') {
+      await optimizeDatabase();
+    }
     
   } catch (error) {
     console.error("Database connection failed:", error.message);

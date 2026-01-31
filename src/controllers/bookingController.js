@@ -403,69 +403,42 @@ exports.bookRoom = async (req, res) => {
 exports.getBookings = async (req, res) => {
   try {
     const filter = req.query.all === 'true' ? { deleted: { $ne: true } } : { isActive: true, deleted: { $ne: true } };
-    const bookings = await Booking.find(filter)
-      .populate('categoryId')
-      .maxTimeMS(5000)
-      .lean()
-      .exec();
     
-    // Get all rooms and categories in parallel for optimization
+    // Use aggregation for better performance
+    const bookings = await Booking.aggregate([
+      { $match: filter },
+      { $sort: { createdAt: -1 } },
+      { $limit: 500 }, // Limit results
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categoryId',
+          foreignField: '_id',
+          as: 'categoryId',
+          pipeline: [{ $project: { name: 1 } }]
+        }
+      },
+      { $unwind: { path: '$categoryId', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          grcNo: 1, bookingNo: 1, name: 1, mobileNo: 1, roomNumber: 1,
+          checkInDate: 1, checkOutDate: 1, status: 1, rate: 1,
+          categoryId: { $ifNull: ['$categoryId', { name: 'Unknown' }] },
+          createdAt: 1, days: 1, noOfAdults: 1, noOfChildren: 1,
+          roomRates: 1, extraBed: 1, extraBedRooms: 1
+        }
+      }
+    ]);
+    
+    // Get rooms and categories separately with minimal fields
     const [rooms, categories] = await Promise.all([
-      Room.find({}).maxTimeMS(5000).lean().exec(),
-      Category.find({}).maxTimeMS(5000).lean().exec()
+      Room.find({}, 'room_number categoryId status extra_bed').lean(),
+      Category.find({}, 'name').lean()
     ]);
 
-    // Map bookings with all necessary data included
-    const safeBookings = bookings.map(booking => {
-      const bookingObj = booking.toObject ? booking.toObject() : booking;
-      
-      // Ensure category data is available
-      if (!bookingObj.categoryId) {
-        bookingObj.categoryId = { name: 'Unknown' };
-      }
-      
-      // Calculate extra bed rooms
-      if (bookingObj.extraBedRooms && Array.isArray(bookingObj.extraBedRooms)) {
-        bookingObj.extraBedRooms = bookingObj.extraBedRooms;
-      } else if (bookingObj.roomNumber) {
-        const roomNumbers = bookingObj.roomNumber.split(',').map(r => r.trim());
-        const extraBedRooms = [];
-        
-        roomNumbers.forEach(roomNum => {
-          const roomRate = bookingObj.roomRates?.find(r => r.roomNumber === roomNum);
-          if (roomRate?.extraBed) {
-            extraBedRooms.push(roomNum);
-          } else if (bookingObj.extraBed) {
-            extraBedRooms.push(roomNum);
-          } else {
-            const roomData = rooms.find(r => 
-              String(r.room_number) === String(roomNum) || 
-              String(r.roomNumber) === String(roomNum)
-            );
-            if (roomData?.extra_bed === true) {
-              extraBedRooms.push(roomNum);
-            }
-          }
-        });
-        
-        bookingObj.extraBedRooms = extraBedRooms;
-      }
-      
-      return bookingObj;
-    });
-
-    // Return optimized response with all data included
-    res.json({
-      bookings: safeBookings,
-      rooms: rooms,
-      categories: categories
-    });
+    res.json({ bookings, rooms, categories });
   } catch (error) {
-    if (error.name === 'MongooseError' && error.message.includes('buffering timed out')) {
-      res.status(408).json({ error: 'Database query timeout. Please try again.' });
-    } else {
-      res.status(500).json({ error: error.message });
-    }
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -893,19 +866,17 @@ exports.extendBooking = async (req, res) => {
 exports.getBookingByGRC = async (req, res) => {
   try {
     const { grcNo } = req.params;
-
-    const booking = await Booking.findOne({ grcNo }).populate('categoryId');
+    const booking = await Booking.findOne({ grcNo }, {
+      name: 1, grcNo: 1, roomNumber: 1, checkInDate: 1, checkOutDate: 1,
+      status: 1, rate: 1, categoryId: 1, mobileNo: 1, days: 1
+    }).populate('categoryId', 'name').lean();
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found with given GRC' });
     }
 
-    const result = booking.toObject ? booking.toObject() : booking;
-    if (!result.categoryId) {
-      result.categoryId = { name: 'Unknown' };
-    }
-
-    res.json({ success: true, booking: result });
+    if (!booking.categoryId) booking.categoryId = { name: 'Unknown' };
+    res.json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1000,7 +971,7 @@ exports.searchCustomers = async (req, res) => {
         { email: searchRegex },
         { grcNo: searchRegex }
       ]
-    }).select('grcNo name mobileNo email createdAt').sort({ createdAt: -1 }).limit(10);
+    }, 'grcNo name mobileNo email createdAt').sort({ createdAt: -1 }).limit(10).lean();
 
     res.json({ success: true, customers });
   } catch (error) {
@@ -1013,19 +984,17 @@ exports.searchCustomers = async (req, res) => {
 exports.getBookingByNumber = async (req, res) => {
   try {
     const { bookingNo } = req.params;
-
-    const booking = await Booking.findOne({ bookingNo }).populate('categoryId');
+    const booking = await Booking.findOne({ bookingNo }, {
+      name: 1, grcNo: 1, roomNumber: 1, checkInDate: 1, checkOutDate: 1,
+      status: 1, rate: 1, categoryId: 1, mobileNo: 1, days: 1
+    }).populate('categoryId', 'name').lean();
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    const result = booking.toObject ? booking.toObject() : booking;
-    if (!result.categoryId) {
-      result.categoryId = { name: 'Unknown' };
-    }
-
-    res.json({ success: true, booking: result });
+    if (!booking.categoryId) booking.categoryId = { name: 'Unknown' };
+    res.json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1035,19 +1004,17 @@ exports.getBookingByNumber = async (req, res) => {
 exports.getBookingById = async (req, res) => {
   try {
     const { bookingId } = req.params;
-
-    const booking = await Booking.findById(bookingId).populate('categoryId');
+    const booking = await Booking.findById(bookingId, {
+      name: 1, grcNo: 1, roomNumber: 1, checkInDate: 1, checkOutDate: 1,
+      status: 1, rate: 1, categoryId: 1, mobileNo: 1, days: 1
+    }).populate('categoryId', 'name').lean();
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    const result = booking.toObject ? booking.toObject() : booking;
-    if (!result.categoryId) {
-      result.categoryId = { name: 'Unknown' };
-    }
-
-    res.json({ success: true, booking: result });
+    if (!booking.categoryId) booking.categoryId = { name: 'Unknown' };
+    res.json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

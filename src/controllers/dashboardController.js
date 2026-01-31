@@ -18,12 +18,7 @@ exports.getDashboardStats = async (req, res) => {
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date();
         todayEnd.setHours(23, 59, 59, 999);
-        dateFilter = {
-          createdAt: {
-            $gte: todayStart,
-            $lte: todayEnd
-          }
-        };
+        dateFilter = { createdAt: { $gte: todayStart, $lte: todayEnd } };
         break;
       case 'weekly':
         const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
@@ -47,103 +42,102 @@ exports.getDashboardStats = async (req, res) => {
         break;
       case 'range':
         if (startDate && endDate) {
-          dateFilter = {
-            createdAt: {
-              $gte: new Date(startDate),
-              $lte: new Date(endDate)
-            }
-          };
+          dateFilter = { createdAt: { $gte: new Date(startDate), $lte: new Date(endDate) } };
         }
         break;
     }
 
-    // Base query
     const baseQuery = { deleted: { $ne: true }, ...dateFilter };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-    // Today's date filter for check-ins/check-outs
-    const todayFilterForCheckInOut = new Date();
-    todayFilterForCheckInOut.setHours(0, 0, 0, 0);
-    const todayEndForCheckInOut = new Date();
-    todayEndForCheckInOut.setHours(23, 59, 59, 999);
-    const todayFilter = {
-      $gte: todayFilterForCheckInOut,
-      $lte: todayEndForCheckInOut
-    };
-
-    // Parallel queries for better performance
-    const [
-      totalBookings,
-      activeBookings,
-      cancelledBookings,
-      cashPaymentsMain,
-      upiPaymentsMain,
-      cashPaymentsAdvance,
-      upiPaymentsAdvance,
-      totalRevenue,
-      cashRevenue,
-      onlineRevenue,
-      laundryOrders,
-      restaurantOrders,
-      todayCheckIns,
-      todayCheckOuts,
-      rooms,
-      totalLaundryOrders,
-      totalRestaurantOrders,
-      bookingDetails
-    ] = await Promise.all([
-      Booking.countDocuments(baseQuery),
-      Booking.countDocuments({ ...baseQuery, status: 'Checked In' }),
-      Booking.countDocuments({ ...baseQuery, status: 'Cancelled' }),
-      Booking.countDocuments({ ...baseQuery, paymentMode: 'Cash' }),
-      Booking.countDocuments({ ...baseQuery, paymentMode: 'UPI' }),
-      Booking.countDocuments({ ...baseQuery, 'advancePayments.paymentMode': { $regex: /cash/i } }),
-      Booking.countDocuments({ ...baseQuery, 'advancePayments.paymentMode': { $regex: /upi|online|card/i } }),
+    // Single optimized aggregation for all stats
+    const [bookingStats, roomCount, orderCounts] = await Promise.all([
       Booking.aggregate([
         { $match: baseQuery },
-        { $group: { _id: null, total: { $sum: '$rate' } } }
+        {
+          $group: {
+            _id: null,
+            totalBookings: { $sum: 1 },
+            activeBookings: { $sum: { $cond: [{ $eq: ['$status', 'Checked In'] }, 1, 0] } },
+            cancelledBookings: { $sum: { $cond: [{ $eq: ['$status', 'Cancelled'] }, 1, 0] } },
+            cashPayments: { $sum: { $cond: [{ $eq: ['$paymentMode', 'Cash'] }, 1, 0] } },
+            upiPayments: { $sum: { $cond: [{ $eq: ['$paymentMode', 'UPI'] }, 1, 0] } },
+            totalRevenue: { $sum: '$rate' },
+            cashRevenue: { $sum: { $cond: [{ $eq: ['$paymentMode', 'Cash'] }, '$rate', 0] } },
+            onlineRevenue: { $sum: { $cond: [{ $eq: ['$paymentMode', 'UPI'] }, '$rate', 0] } },
+            todayCheckIns: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$status', 'Checked In'] },
+                      { $gte: ['$checkInDate', todayStart] },
+                      { $lte: ['$checkInDate', todayEnd] }
+                    ]
+                  },
+                  1, 0
+                ]
+              }
+            },
+            todayCheckOuts: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$status', 'Checked Out'] },
+                      { $gte: ['$checkOutDate', todayStart] },
+                      { $lte: ['$checkOutDate', todayEnd] }
+                    ]
+                  },
+                  1, 0
+                ]
+              }
+            }
+          }
+        }
       ]),
-      Booking.aggregate([
-        { $match: { ...baseQuery, paymentMode: 'Cash' } },
-        { $group: { _id: null, total: { $sum: '$rate' } } }
-      ]),
-      Booking.aggregate([
-        { $match: { ...baseQuery, paymentMode: 'UPI' } },
-        { $group: { _id: null, total: { $sum: '$rate' } } }
-      ]),
-      Laundry.countDocuments(baseQuery),
-      RestaurantOrder.countDocuments(dateFilter),
-      Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked In', checkInDate: todayFilter }),
-      Booking.countDocuments({ deleted: { $ne: true }, status: 'Checked Out', checkOutDate: todayFilter }),
-      Room.find({ deleted: { $ne: true } }).populate('categoryId').lean(),
-      Laundry.countDocuments({ deleted: { $ne: true } }),
-      RestaurantOrder.countDocuments({ deleted: { $ne: true } }),
-      Booking.find({ deleted: { $ne: true } }).sort({ createdAt: -1 }).lean()
+      
+      // Just get room count with basic info
+      Room.countDocuments({ deleted: { $ne: true } }),
+      
+      // Order counts only
+      Promise.all([
+        Laundry.countDocuments({ deleted: { $ne: true } }),
+        RestaurantOrder.countDocuments({ deleted: { $ne: true } })
+      ])
     ]);
 
-    const cashPayments = cashPaymentsMain + cashPaymentsAdvance;
-    const upiPayments = upiPaymentsMain + upiPaymentsAdvance;
+    const stats = bookingStats[0] || {
+      totalBookings: 0, activeBookings: 0, cancelledBookings: 0,
+      cashPayments: 0, upiPayments: 0, totalRevenue: 0,
+      cashRevenue: 0, onlineRevenue: 0, todayCheckIns: 0, todayCheckOuts: 0
+    };
+
+    const [totalLaundryOrders, totalRestaurantOrders] = orderCounts;
 
     res.json({
       success: true,
       stats: {
-        totalBookings,
-        activeBookings,
-        cancelledBookings,
+        totalBookings: stats.totalBookings,
+        activeBookings: stats.activeBookings,
+        cancelledBookings: stats.cancelledBookings,
         payments: {
-          cash: cashPayments,
-          upi: upiPayments,
-          other: totalBookings - cashPayments - upiPayments
+          cash: stats.cashPayments,
+          upi: stats.upiPayments,
+          other: stats.totalBookings - stats.cashPayments - stats.upiPayments
         },
-        totalRevenue: totalRevenue[0]?.total || 0,
-        cashRevenue: cashRevenue[0]?.total || 0,
-        onlineRevenue: onlineRevenue[0]?.total || 0,
-        laundryOrders: totalLaundryOrders || 0,
-        restaurantOrders: totalRestaurantOrders || 0,
-        todayCheckIns,
-        todayCheckOuts
+        totalRevenue: stats.totalRevenue,
+        cashRevenue: stats.cashRevenue,
+        onlineRevenue: stats.onlineRevenue,
+        laundryOrders: totalLaundryOrders,
+        restaurantOrders: totalRestaurantOrders,
+        todayCheckIns: stats.todayCheckIns,
+        todayCheckOuts: stats.todayCheckOuts
       },
-      rooms: rooms || [],
-      bookings: bookingDetails || []
+      totalRooms: roomCount
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
