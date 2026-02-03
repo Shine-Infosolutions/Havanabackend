@@ -204,12 +204,17 @@ bookingSchema.pre('save', async function(next) {
   if (!this.invoiceNumber) {
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     const lastInvoice = await this.constructor.findOne(
-      { deleted: { $ne: true }, invoiceNumber: { $regex: `^HH/${month}/` } },
+      { deleted: { $ne: true }, invoiceNumber: { $exists: true, $ne: null } },
       { invoiceNumber: 1 }
-    ).sort({ invoiceNumber: -1 }).lean();
+    ).sort({ createdAt: -1 }).lean();
     
-    const nextNum = lastInvoice ? 
-      parseInt(lastInvoice.invoiceNumber.split('/')[2]) + 1 : 1;
+    let nextNum = 1;
+    if (lastInvoice && lastInvoice.invoiceNumber) {
+      const parts = lastInvoice.invoiceNumber.split('/');
+      if (parts.length === 3) {
+        nextNum = parseInt(parts[2]) + 1;
+      }
+    }
     this.invoiceNumber = `HH/${month}/${String(nextNum).padStart(4, '0')}`;
   }
   
