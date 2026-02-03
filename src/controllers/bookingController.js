@@ -421,7 +421,7 @@ exports.getBookings = async (req, res) => {
       { $unwind: { path: '$categoryId', preserveNullAndEmptyArrays: true } },
       {
         $project: {
-          grcNo: 1, bookingNo: 1, name: 1, mobileNo: 1, roomNumber: 1,
+          grcNo: 1, bookingNo: 1, invoiceNumber: 1, name: 1, mobileNo: 1, roomNumber: 1,
           checkInDate: 1, checkOutDate: 1, status: 1, rate: 1,
           categoryId: { $ifNull: ['$categoryId', { name: 'Unknown' }] },
           createdAt: 1, days: 1, noOfAdults: 1, noOfChildren: 1,
