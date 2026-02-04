@@ -422,10 +422,15 @@ exports.getBookings = async (req, res) => {
       {
         $project: {
           grcNo: 1, bookingNo: 1, invoiceNumber: 1, name: 1, mobileNo: 1, roomNumber: 1,
-          checkInDate: 1, checkOutDate: 1, status: 1, rate: 1,
+          checkInDate: 1, checkOutDate: 1, status: 1, rate: 1, taxableAmount: 1,
+          cgstRate: 1, sgstRate: 1, cgstAmount: 1, sgstAmount: 1,
+          salutation: 1, age: 1, gender: 1, address: 1, city: 1, nationality: 1,
+          email: 1, phoneNo: 1, birthDate: 1, anniversary: 1,
+          companyName: 1, companyGSTIN: 1, idProofType: 1, idProofNumber: 1,
+          idProofImageUrl: 1, idProofImageUrl2: 1, photoUrl: 1,
           categoryId: { $ifNull: ['$categoryId', { name: 'Unknown' }] },
           createdAt: 1, days: 1, noOfAdults: 1, noOfChildren: 1,
-          roomRates: 1, extraBed: 1, extraBedRooms: 1
+          roomRates: 1, extraBed: 1, extraBedRooms: 1, roomGuestDetails: 1
         }
       }
     ]);
@@ -995,6 +1000,22 @@ exports.getBookingByNumber = async (req, res) => {
 
     if (!booking.categoryId) booking.categoryId = { name: 'Unknown' };
     res.json({ success: true, booking });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get complete booking details by ID (for editing)
+exports.getCompleteBookingById = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await Booking.findById(bookingId).populate('categoryId');
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    res.json(booking);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

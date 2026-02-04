@@ -39,6 +39,9 @@ router.get("/booking-number/:bookingNo", auth, authorize(['ADMIN', 'GM', 'ACCOUN
 router.get("/details-with-charges/:bookingId", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), bookingController.getBookingDetailsWithCharges);
 
 // Get booking by ID (All roles)
+router.get("/details/:bookingId", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), bookingController.getCompleteBookingById);
+
+// Get booking by ID (All roles)
 router.get("/:bookingId", auth, authorize(['ADMIN', 'GM', 'ACCOUNTS', 'STAFF', 'FRONT DESK']), bookingController.getBookingById);
 
 // Fix room availability (Admin only)
