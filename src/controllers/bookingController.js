@@ -351,8 +351,16 @@ exports.bookRoom = async (req, res) => {
 
       // Set all rooms status to 'booked'
       for (const room of roomsToBook) {
-        room.status = 'booked';
-        await room.save();
+        try {
+          await Room.findOneAndUpdate(
+            { _id: room._id },
+            { status: 'booked' },
+            { new: true }
+          );
+          console.log(`Room ${room.room_number} set to booked after booking creation`);
+        } catch (error) {
+          console.error(`Failed to update room ${room.room_number} status:`, error);
+        }
       }
 
       return [booking]; // Return array with single booking containing all rooms
@@ -493,28 +501,32 @@ exports.checkoutBooking = async (req, res) => {
     let updatedRooms = 0;
 
     for (const roomNum of roomNumbers) {
-      // Find the room associated with this booking - try multiple approaches
-      let room = await Room.findOne({ room_number: roomNum });
-      
-      if (!room) {
-        room = await Room.findOne({ room_number: String(roomNum) });
-      }
-      
-      if (!room && booking.categoryId) {
-        room = await Room.findOne({
-          categoryId: booking.categoryId,
-          room_number: roomNum
+      try {
+        // Check for other active bookings for this room
+        const otherActiveBookings = await Booking.countDocuments({
+          _id: { $ne: bookingId },
+          roomNumber: { $regex: new RegExp(`(^|,)\\s*${roomNum}\\s*(,|$)`) },
+          status: { $in: ['Booked', 'Checked In'] },
+          isActive: true
         });
-      }
 
-      if (room) {
-        // Set Room.status to 'available' when checking out
-        room.status = 'available';
-        await room.save();
-        updatedRooms++;
-        console.log(`Room ${room.room_number} set to available after checkout`);
-      } else {
-        console.log(`Warning: Could not find room ${roomNum} to update status`);
+        const newStatus = otherActiveBookings > 0 ? 'booked' : 'available';
+
+        // Update room status
+        const updatedRoom = await Room.findOneAndUpdate(
+          { room_number: roomNum },
+          { status: newStatus },
+          { new: true }
+        );
+
+        if (updatedRoom) {
+          updatedRooms++;
+          console.log(`Room ${roomNum} set to ${newStatus} after checkout (${otherActiveBookings} other active bookings)`);
+        } else {
+          console.log(`Warning: Could not find room ${roomNum} to update status`);
+        }
+      } catch (error) {
+        console.error(`Error updating room ${roomNum} status:`, error);
       }
     }
 
@@ -556,28 +568,32 @@ exports.deleteBooking = async (req, res) => {
     let updatedRooms = 0;
 
     for (const roomNum of roomNumbers) {
-      // Find the room associated with this booking - try multiple approaches
-      let room = await Room.findOne({ room_number: roomNum });
-      
-      if (!room) {
-        room = await Room.findOne({ room_number: String(roomNum) });
-      }
-      
-      if (!room && booking.categoryId) {
-        room = await Room.findOne({
-          categoryId: booking.categoryId,
-          room_number: roomNum
+      try {
+        // Check for other active bookings for this room
+        const otherActiveBookings = await Booking.countDocuments({
+          _id: { $ne: bookingId },
+          roomNumber: { $regex: new RegExp(`(^|,)\\s*${roomNum}\\s*(,|$)`) },
+          status: { $in: ['Booked', 'Checked In'] },
+          isActive: true
         });
-      }
 
-      if (room) {
-        // Set Room.status to 'available' when unbooking
-        room.status = 'available';
-        await room.save();
-        updatedRooms++;
-        console.log(`Room ${room.room_number} set to available after cancellation`);
-      } else {
-        console.log(`Warning: Could not find room ${roomNum} to update status`);
+        const newStatus = otherActiveBookings > 0 ? 'booked' : 'available';
+
+        // Update room status
+        const updatedRoom = await Room.findOneAndUpdate(
+          { room_number: roomNum },
+          { status: newStatus },
+          { new: true }
+        );
+
+        if (updatedRoom) {
+          updatedRooms++;
+          console.log(`Room ${roomNum} set to ${newStatus} after cancellation (${otherActiveBookings} other active bookings)`);
+        } else {
+          console.log(`Warning: Could not find room ${roomNum} to update status`);
+        }
+      } catch (error) {
+        console.error(`Error updating room ${roomNum} status:`, error);
       }
     }
 
@@ -654,6 +670,25 @@ exports.updateBooking = async (req, res) => {
       
       // Set actual check-in time
       booking.actualCheckInTime = new Date();
+      
+      // Set room status to booked when checking in
+      for (const roomNum of roomNumbers) {
+        try {
+          const updatedRoom = await Room.findOneAndUpdate(
+            { room_number: roomNum },
+            { status: 'booked' },
+            { new: true }
+          );
+          
+          if (updatedRoom) {
+            console.log(`Room ${roomNum} set to booked after check-in`);
+          } else {
+            console.log(`Warning: Could not find room ${roomNum} to update status`);
+          }
+        } catch (error) {
+          console.error(`Error updating room ${roomNum} status on check-in:`, error);
+        }
+      }
     }
     
     // Handle status change to Checked Out - set actual check-out time
@@ -665,25 +700,33 @@ exports.updateBooking = async (req, res) => {
     if (updates.status && (updates.status === 'Cancelled' || updates.status === 'Checked Out')) {
       const roomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(num => num.trim()) : [];
       
-      // Set all rooms to available
+      // Check for other active bookings before setting rooms to available
       for (const roomNum of roomNumbers) {
-        let room = await Room.findOne({ room_number: roomNum });
-        
-        if (!room) {
-          room = await Room.findOne({ room_number: String(roomNum) });
-        }
-        
-        if (!room && booking.categoryId) {
-          room = await Room.findOne({
-            categoryId: booking.categoryId,
-            room_number: roomNum
+        try {
+          // Check for other active bookings for this room
+          const otherActiveBookings = await Booking.countDocuments({
+            _id: { $ne: bookingId },
+            roomNumber: { $regex: new RegExp(`(^|,)\\s*${roomNum}\\s*(,|$)`) },
+            status: { $in: ['Booked', 'Checked In'] },
+            isActive: true
           });
-        }
 
-        if (room) {
-          room.status = 'available';
-          await room.save();
-          console.log(`Room ${room.room_number} set to available after ${updates.status}`);
+          const newStatus = otherActiveBookings > 0 ? 'booked' : 'available';
+
+          // Update room status
+          const updatedRoom = await Room.findOneAndUpdate(
+            { room_number: roomNum },
+            { status: newStatus },
+            { new: true }
+          );
+
+          if (updatedRoom) {
+            console.log(`Room ${roomNum} set to ${newStatus} after ${updates.status} (${otherActiveBookings} other active bookings)`);
+          } else {
+            console.log(`Warning: Could not find room ${roomNum} to update status`);
+          }
+        } catch (error) {
+          console.error(`Error updating room ${roomNum} status:`, error);
         }
       }
     }
@@ -693,21 +736,52 @@ exports.updateBooking = async (req, res) => {
       const oldRoomNumbers = booking.roomNumber ? booking.roomNumber.split(',').map(num => num.trim()) : [];
       const newRoomNumbers = updates.selectedRooms.map(room => room.room_number);
       
-      // Set old rooms to available
+      // Set old rooms to available (check for other bookings first)
       for (const roomNum of oldRoomNumbers) {
-        const room = await Room.findOne({ room_number: roomNum });
-        if (room) {
-          room.status = 'available';
-          await room.save();
+        try {
+          // Check for other active bookings for this room
+          const otherActiveBookings = await Booking.countDocuments({
+            _id: { $ne: bookingId },
+            roomNumber: { $regex: new RegExp(`(^|,)\\s*${roomNum}\\s*(,|$)`) },
+            status: { $in: ['Booked', 'Checked In'] },
+            isActive: true
+          });
+
+          const newStatus = otherActiveBookings > 0 ? 'booked' : 'available';
+
+          // Update room status
+          const updatedRoom = await Room.findOneAndUpdate(
+            { room_number: roomNum },
+            { status: newStatus },
+            { new: true }
+          );
+
+          if (updatedRoom) {
+            console.log(`Room ${roomNum} set to ${newStatus} after room change (${otherActiveBookings} other active bookings)`);
+          } else {
+            console.log(`Warning: Could not find room ${roomNum} to update status`);
+          }
+        } catch (error) {
+          console.error(`Error updating room ${roomNum} status:`, error);
         }
       }
       
       // Set new rooms to booked
       for (const roomNum of newRoomNumbers) {
-        const room = await Room.findOne({ room_number: roomNum });
-        if (room) {
-          room.status = 'booked';
-          await room.save();
+        try {
+          const updatedRoom = await Room.findOneAndUpdate(
+            { room_number: roomNum },
+            { status: 'booked' },
+            { new: true }
+          );
+          
+          if (updatedRoom) {
+            console.log(`Room ${roomNum} set to booked after room change`);
+          } else {
+            console.log(`Warning: Could not find room ${roomNum} to update status`);
+          }
+        } catch (error) {
+          console.error(`Error updating room ${roomNum} status:`, error);
         }
       }
       
