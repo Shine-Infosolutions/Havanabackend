@@ -280,7 +280,7 @@ exports.getComprehensiveCheckout = async (req, res) => {
 exports.updatePaymentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, paidAmount, lateCheckoutFee } = req.body;
+    const { status, paidAmount, lateCheckoutFee, paymentMode } = req.body;
 
     // Validate ObjectId
     if (!id || id === 'undefined' || !mongoose.Types.ObjectId.isValid(id)) {
@@ -301,23 +301,9 @@ exports.updatePaymentStatus = async (req, res) => {
     if ((status === 'Completed' || status === 'paid') && checkout.bookingId) {
       const booking = checkout.bookingId;
       
-      // Add the final payment to advance payments array
-      if (paidAmount && paidAmount > 0) {
-        const finalPayment = {
-          amount: paidAmount,
-          paymentMode: 'Cash', // Default to cash, could be made dynamic
-          paymentDate: new Date(),
-          reference: 'Final checkout payment',
-          notes: 'Payment processed during checkout'
-        };
-        
-        if (!booking.advancePayments) {
-          booking.advancePayments = [];
-        }
-        booking.advancePayments.push(finalPayment);
-        
-        // Update total advance amount
-        booking.totalAdvanceAmount = booking.advancePayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+      // Store payment mode in booking.paymentMode field (NOT in advancePayments)
+      if (paymentMode) {
+        booking.paymentMode = paymentMode;
       }
       
       // Update booking status to 'Checked Out' and set actual checkout time
