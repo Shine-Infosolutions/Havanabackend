@@ -71,6 +71,7 @@ const bookingSchema = new mongoose.Schema({
   }],
   roomRates: [{
     roomNumber: { type: String, required: true },
+    roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room' }, // Store actual room _id
     customRate: { type: Number, default: 0 },
     extraBed: { type: Boolean, default: false },
     extraBedStartDate: { type: Date, default: null }
