@@ -241,7 +241,10 @@ exports.getComprehensiveCheckout = async (req, res) => {
         roomNumber: booking.roomNumber,
         checkInDate: booking.checkInDate,
         checkOutDate: booking.checkOutDate,
+        timeIn: booking.timeIn,
         timeOut: booking.timeOut,
+        actualCheckInTime: booking.actualCheckInTime,
+        actualCheckOutTime: booking.actualCheckOutTime,
         advancePayments: booking.advancePayments || [],
         discountPercent: booking.discountPercent,
         discountNotes: booking.discountNotes,
@@ -431,7 +434,7 @@ exports.getInvoice = async (req, res) => {
     const checkout = await Checkout.findById(id)
       .populate({
         path: 'bookingId',
-        select: 'grcNo name roomNumber checkInDate checkOutDate mobileNo address city rate taxableAmount cgstAmount sgstAmount cgstRate sgstRate noOfAdults noOfChildren extraBed extraBedCharge extraBedRooms roomRates days',
+        select: 'grcNo name roomNumber checkInDate checkOutDate timeIn timeOut actualCheckInTime actualCheckOutTime mobileNo address city rate taxableAmount cgstAmount sgstAmount cgstRate sgstRate noOfAdults noOfChildren extraBed extraBedCharge extraBedRooms roomRates days',
         populate: {
           path: 'categoryId',
           select: 'name'
@@ -545,7 +548,11 @@ exports.getInvoice = async (req, res) => {
         pax: (booking?.noOfAdults || 0) + (booking?.noOfChildren || 0),
         adult: booking?.noOfAdults || 2,
         checkInDate: booking?.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('en-GB') : 'N/A',
-        checkOutDate: booking?.checkOutDate ? new Date(booking.checkOutDate).toLocaleDateString('en-GB') : 'N/A'
+        checkOutDate: booking?.checkOutDate ? new Date(booking.checkOutDate).toLocaleDateString('en-GB') : 'N/A',
+        timeIn: booking?.timeIn || '',
+        timeOut: booking?.timeOut || '',
+        actualCheckInTime: booking?.actualCheckInTime || null,
+        actualCheckOutTime: booking?.actualCheckOutTime || null
       },
       clientDetails: {
         name: booking?.name || 'N/A',
