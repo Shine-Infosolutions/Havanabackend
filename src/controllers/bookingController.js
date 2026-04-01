@@ -56,36 +56,33 @@ const uploadBase64ToCloudinary = async (base64String) => {
 };
 
 // 🔹 Generate sequential GRC number (resets on April 1st each financial year)
+// Format: GRC{YY}-{0001} e.g. GRC25-0001 for FY 2025-26
 const generateGRC = async () => {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const financialYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+  const fyTag = String(financialYear).slice(-2); // e.g. "25" for 2025-26
   const financialYearStart = new Date(financialYear, 3, 1, 0, 0, 0, 0);
   const financialYearEnd = new Date(financialYear + 1, 2, 31, 23, 59, 59, 999);
+  const grcPrefix = `GRC${fyTag}-`;
 
   const MAX_RETRIES = 5;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const bookingsThisYear = await Booking.find({
       createdAt: { $gte: financialYearStart, $lte: financialYearEnd },
-      grcNo: { $regex: /^GRC\d+$/ }
+      grcNo: { $regex: new RegExp(`^${grcPrefix}\\d+$`) }
     }, { grcNo: 1 }).lean();
 
     let nextNumber = 1;
     if (bookingsThisYear.length > 0) {
-      const maxNumber = Math.max(...bookingsThisYear.map(b => parseInt(b.grcNo.replace('GRC', ''), 10) || 0));
+      const maxNumber = Math.max(...bookingsThisYear.map(b => parseInt(b.grcNo.replace(grcPrefix, ''), 10) || 0));
       nextNumber = maxNumber + 1;
     }
 
-    const candidate = `GRC${nextNumber.toString().padStart(4, '0')}`;
+    const candidate = `${grcPrefix}${nextNumber.toString().padStart(4, '0')}`;
 
-    // Only check for collision within the SAME financial year (not globally)
-    // GRC0001 from last year should not block GRC0001 this year
-    const collision = await Booking.findOne({
-      grcNo: candidate,
-      createdAt: { $gte: financialYearStart, $lte: financialYearEnd }
-    }, { _id: 1 }).lean();
-
+    const collision = await Booking.findOne({ grcNo: candidate }, { _id: 1 }).lean();
     if (!collision) return candidate;
   }
 
