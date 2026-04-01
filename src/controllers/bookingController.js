@@ -55,34 +55,39 @@ const uploadBase64ToCloudinary = async (base64String) => {
   }
 };
 
-// 🔹 Generate sequential GRC number (resets in March end)
+// 🔹 Generate sequential GRC number (resets on April 1st each financial year)
+// Uses retry loop to handle race conditions on concurrent bookings
 const generateGRC = async () => {
   const now = new Date();
+  const currentMonth = now.getMonth(); // 0-based
   const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth(); // 0-based (March = 2)
-  
-  // Financial year starts from April (month 3)
   const financialYear = currentMonth >= 3 ? currentYear : currentYear - 1;
-  const financialYearStart = new Date(financialYear, 3, 1); // April 1st
-  const financialYearEnd = new Date(financialYear + 1, 2, 31, 23, 59, 59); // March 31st
-  
-  // Find highest GRC in current financial year
-  const lastBooking = await Booking.findOne({
-    createdAt: {
-      $gte: financialYearStart,
-      $lte: financialYearEnd
+  const financialYearStart = new Date(financialYear, 3, 1, 0, 0, 0, 0);
+  const financialYearEnd = new Date(financialYear + 1, 2, 31, 23, 59, 59, 999);
+
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const bookingsThisYear = await Booking.find({
+      createdAt: { $gte: financialYearStart, $lte: financialYearEnd },
+      grcNo: { $regex: /^GRC\d+$/ }
+    }, { grcNo: 1 }).lean();
+
+    let nextNumber = 1;
+    if (bookingsThisYear.length > 0) {
+      const maxNumber = Math.max(...bookingsThisYear.map(b => parseInt(b.grcNo.replace('GRC', ''), 10) || 0));
+      nextNumber = maxNumber + 1;
     }
-  }, { grcNo: 1 })
-    .sort({ grcNo: -1 })
-    .lean();
-  
-  let nextNumber = 1;
-  if (lastBooking && lastBooking.grcNo) {
-    const lastNumber = parseInt(lastBooking.grcNo.replace('GRC', ''));
-    nextNumber = lastNumber + 1;
+
+    const candidate = `GRC${nextNumber.toString().padStart(4, '0')}`;
+
+    // Check if this GRC is already taken (handles race condition)
+    const exists = await Booking.findOne({ grcNo: candidate }, { _id: 1 }).lean();
+    if (!exists) return candidate;
+
+    // If taken, loop again — next iteration will pick a higher number
   }
-  
-  return `GRC${nextNumber.toString().padStart(4, '0')}`;
+
+  throw new Error('Failed to generate unique GRC after multiple attempts');
 };
 
 
